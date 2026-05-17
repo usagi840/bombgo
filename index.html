@@ -1,429 +1,353 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Décodeur de messages</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+import { useState } from "react";
 
-    :root {
-      --bg: #f5f2ee;
-      --surface: #ffffff;
-      --border: #e2ddd8;
-      --text: #1a1714;
-      --muted: #8a8179;
-      --accent: #c8402a;
-      --accent-light: #fdf0ed;
-      --radius: 16px;
+const contexts = [
+  { id: "ami", label: "👥 Ami·e" },
+  { id: "amoureux", label: "💌 Amoureux·se" },
+  { id: "famille", label: "👨‍👩‍👧 Famille" },
+  { id: "collègue", label: "💼 Collègue" },
+  { id: "inconnu", label: "🤷 Inconnu·e" },
+];
+
+// Base de données de patterns de sous-entendus
+const patterns = [
+  {
+    triggers: ["c'est bon", "fais comme tu veux", "comme tu veux", "t'inquiète", "peu importe"],
+    vrai_sens: "Ce n'est pas du tout bon. La personne est blessée ou frustrée mais ne veut pas l'avouer directement.",
+    emotion: "😤 Frustration refoulée",
+    sous_entendu: "Je veux que tu insistes et que tu te soucies de mon avis.",
+    conseil: "Ne prends pas ça au pied de la lettre. Demande-lui vraiment comment elle se sent.",
+    tension: 4,
+  },
+  {
+    triggers: ["ok", "ok."],
+    vrai_sens: "Elle n'est pas ok du tout. Ce 'ok' sec cache quelque chose.",
+    emotion: "😶 Froideur distante",
+    sous_entendu: "Je suis déçu·e mais je n'ai plus envie d'en parler.",
+    conseil: "Relance la conversation. Un simple 'ok' seul, c'est rarement bon signe.",
+    tension: 3,
+  },
+  {
+    triggers: ["j'ai compris", "t'inquiète j'ai compris", "c'est bon j'ai compris"],
+    vrai_sens: "Elle n'a pas vraiment envie d'entendre la suite — ou elle est vexée.",
+    emotion: "🙄 Agacement discret",
+    sous_entendu: "Arrête d'expliquer, je ne suis pas d'accord mais je lâche l'affaire.",
+    conseil: "Fais une pause. Laisser souffler avant de continuer la discussion.",
+    tension: 3,
+  },
+  {
+    triggers: ["non c'est rien", "c'est rien", "laisse tomber", "oublie"],
+    vrai_sens: "Ce n'est clairement pas rien. Elle voulait en parler mais a l'impression que tu ne t'y intéresses pas.",
+    emotion: "😔 Déception silencieuse",
+    sous_entendu: "Je voulais me confier mais tu n'as pas l'air de vouloir écouter.",
+    conseil: "Insiste doucement : 'Non dis-moi, j'ai le temps.' Elle attend que tu la relances.",
+    tension: 3,
+  },
+  {
+    triggers: ["si tu veux", "comme tu veux", "c'est toi qui vois"],
+    vrai_sens: "Elle a une préférence mais attend que tu la devines ou que tu proposes.",
+    emotion: "🤐 Passivité stratégique",
+    sous_entendu: "Je veux que tu prennes l'initiative mais je ne vais pas te le dire.",
+    conseil: "Propose une option concrète et demande son avis direct : 'Et toi t'aurais voulu quoi ?'",
+    tension: 2,
+  },
+  {
+    triggers: ["ça va", "bien"],
+    vrai_sens: "Peut-être que ça va, peut-être pas. Sans contexte c'est difficile à dire.",
+    emotion: "😐 Réponse automatique",
+    sous_entendu: "Je réponds par réflexe. Si tu veux savoir vraiment, pose une vraie question.",
+    conseil: "Creuse un peu : 'Vraiment ? T'as l'air bizarre, qu'est-ce qui se passe ?'",
+    tension: 1,
+  },
+  {
+    triggers: ["t'as l'air occupé", "je veux pas te déranger", "c'est pas grave"],
+    vrai_sens: "Elle a besoin de toi mais n'ose pas le demander directement.",
+    emotion: "🥺 Besoin d'attention masqué",
+    sous_entendu: "J'aimerais que tu me dises que tu as du temps pour moi.",
+    conseil: "Réponds immédiatement que tu es disponible. Elle attend juste ce signal.",
+    tension: 2,
+  },
+  {
+    triggers: ["intéressant", "c'est intéressant"],
+    vrai_sens: "Elle ne partage pas vraiment ton enthousiasme mais reste polie.",
+    emotion: "😑 Politesse froide",
+    sous_entendu: "Je ne suis pas convaincu·e mais je ne veux pas te vexer.",
+    conseil: "Demande franchement son avis : elle attend que tu lui donnes la permission de critiquer.",
+    tension: 2,
+  },
+  {
+    triggers: ["on verra", "peut-être", "je sais pas"],
+    vrai_sens: "C'est probablement non, mais elle n'assume pas de le dire clairement.",
+    emotion: "😬 Hésitation ou refus déguisé",
+    sous_entendu: "J'évite de dire non pour ne pas créer de conflit.",
+    conseil: "Donne-lui une porte de sortie confortable : 'Dis-moi franchement si t'as pas envie.'",
+    tension: 2,
+  },
+  {
+    triggers: ["non c'est bon", "non je gère", "j'ai pas besoin d'aide"],
+    vrai_sens: "Elle galère mais son orgueil l'empêche de demander de l'aide.",
+    emotion: "💪 Orgueil blessé",
+    sous_entendu: "J'aurais aimé que tu proposes sans que j'aie à demander.",
+    conseil: "Propose une aide concrète sans demander : 'Je fais X pour toi, pas de discussion.'",
+    tension: 2,
+  },
+];
+
+function analyzeMessage(text, context) {
+  const lower = text.toLowerCase();
+
+  // Cherche un pattern correspondant
+  for (const p of patterns) {
+    if (p.triggers.some(t => lower.includes(t))) {
+      // Adapte légèrement selon le contexte
+      let conseil = p.conseil;
+      if (context === "amoureux" && p.tension >= 3) {
+        conseil += " Dans une relation amoureuse, ce type de message mérite une vraie conversation en face à face.";
+      } else if (context === "collègue" && p.tension >= 4) {
+        conseil += " En contexte pro, reste factuel et ne prends pas ça trop à cœur.";
+      }
+      return { ...p, conseil };
     }
+  }
 
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 48px 20px 80px;
-    }
+  // Analyse générique si aucun pattern trouvé
+  const isShort = text.trim().split(" ").length <= 3;
+  const hasPoint = text.trim().endsWith(".");
+  const hasExclaim = text.includes("!");
+  const hasSmiley = /[:;]-?[\)\(DOPp]|[\u{1F600}-\u{1F64F}]/u.test(text);
 
-    header {
-      text-align: center;
-      margin-bottom: 48px;
-      animation: fadeUp 0.6s ease both;
-    }
+  if (isShort && hasPoint && !hasSmiley) {
+    return {
+      vrai_sens: "Ce message court et sec cache probablement une certaine froideur ou distance.",
+      emotion: "❄️ Distance émotionnelle",
+      sous_entendu: "Je réponds le minimum. Je ne suis pas entièrement à l'aise.",
+      conseil: "Essaie de réchauffer l'échange avec une question ouverte et sincère.",
+      tension: 3,
+    };
+  }
 
-    header .eyebrow {
-      font-size: 11px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--accent);
-      font-weight: 500;
-      margin-bottom: 12px;
-    }
+  if (hasExclaim && hasSmiley) {
+    return {
+      vrai_sens: "Le message paraît positif et enthousiaste — a priori pas de sous-entendu négatif.",
+      emotion: "😊 Bonne humeur sincère",
+      sous_entendu: "Ce que tu vois est probablement ce qu'il y a. Pas de double sens détecté.",
+      conseil: "Réponds avec la même énergie, ça a l'air de bien se passer !",
+      tension: 1,
+    };
+  }
 
-    header h1 {
-      font-family: 'DM Serif Display', serif;
-      font-size: clamp(2rem, 5vw, 3.2rem);
-      line-height: 1.15;
-      color: var(--text);
-    }
-
-    header h1 em {
-      font-style: italic;
-      color: var(--accent);
-    }
-
-    header p {
-      margin-top: 14px;
-      color: var(--muted);
-      font-size: 15px;
-      font-weight: 300;
-      max-width: 380px;
-      margin-inline: auto;
-      line-height: 1.6;
-    }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 32px;
-      width: 100%;
-      max-width: 620px;
-      animation: fadeUp 0.6s ease 0.1s both;
-      box-shadow: 0 2px 20px rgba(0,0,0,0.04);
-    }
-
-    .context-row {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
-
-    .chip {
-      padding: 7px 16px;
-      border-radius: 99px;
-      border: 1.5px solid var(--border);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      background: transparent;
-      color: var(--muted);
-      transition: all 0.18s ease;
-      font-family: 'DM Sans', sans-serif;
-    }
-
-    .chip:hover { border-color: var(--accent); color: var(--accent); }
-    .chip.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: white;
-    }
-
-    label {
-      display: block;
-      font-size: 12px;
-      font-weight: 500;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 10px;
-    }
-
-    textarea {
-      width: 100%;
-      min-height: 130px;
-      border: 1.5px solid var(--border);
-      border-radius: 10px;
-      padding: 16px;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 15px;
-      color: var(--text);
-      background: var(--bg);
-      resize: vertical;
-      outline: none;
-      transition: border-color 0.2s;
-      line-height: 1.6;
-    }
-
-    textarea:focus { border-color: var(--accent); }
-    textarea::placeholder { color: #bbb; }
-
-    .btn {
-      margin-top: 20px;
-      width: 100%;
-      padding: 15px;
-      background: var(--accent);
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 15px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-
-    .btn:hover:not(:disabled) {
-      background: #a8321f;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 16px rgba(200,64,42,0.3);
-    }
-
-    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-
-    /* Results */
-    .result-card {
-      width: 100%;
-      max-width: 620px;
-      margin-top: 24px;
-      animation: fadeUp 0.5s ease both;
-    }
-
-    .result-section {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px 32px;
-      margin-bottom: 14px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.03);
-    }
-
-    .result-section .tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      padding: 4px 12px;
-      border-radius: 99px;
-      margin-bottom: 14px;
-    }
-
-    .tag.red { background: var(--accent-light); color: var(--accent); }
-    .tag.blue { background: #edf2ff; color: #3455d1; }
-    .tag.green { background: #edfaf3; color: #1a7a4a; }
-    .tag.orange { background: #fff7ed; color: #c2610a; }
-
-    .result-section p {
-      font-size: 16px;
-      line-height: 1.65;
-      color: var(--text);
-    }
-
-    .result-section .sub {
-      font-size: 13px;
-      color: var(--muted);
-      margin-top: 8px;
-      line-height: 1.5;
-    }
-
-    /* Tone meter */
-    .tone-bar {
-      display: flex;
-      gap: 4px;
-      margin-top: 12px;
-    }
-
-    .tone-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--border);
-      transition: background 0.3s ease;
-    }
-
-    .tone-dot.active { background: var(--accent); }
-
-    /* Loading */
-    .loading {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      color: var(--muted);
-      font-size: 14px;
-      padding: 20px 0;
-      justify-content: center;
-    }
-
-    .dot-pulse {
-      display: flex;
-      gap: 5px;
-    }
-
-    .dot-pulse span {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--accent);
-      animation: pulse 1.2s ease-in-out infinite;
-    }
-
-    .dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
-    .dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
-
-    @keyframes pulse {
-      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-      40% { transform: scale(1); opacity: 1; }
-    }
-
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(18px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .divider {
-      height: 1px;
-      background: var(--border);
-      margin: 16px 0;
-    }
-
-    .original-bubble {
-      background: var(--bg);
-      border-radius: 10px;
-      padding: 14px 18px;
-      font-size: 14px;
-      color: var(--muted);
-      margin-bottom: 20px;
-      border-left: 3px solid var(--border);
-      font-style: italic;
-    }
-  </style>
-</head>
-<body>
-
-<header>
-  <div class="eyebrow">Analyse de message</div>
-  <h1>Ce qu'ils voulaient<br/><em>vraiment</em> dire</h1>
-  <p>Colle un message reçu. On te dit ce qui se cache vraiment derrière les mots.</p>
-</header>
-
-<div class="card">
-  <label>Contexte de la relation</label>
-  <div class="context-row" id="contextChips">
-    <button class="chip active" data-ctx="ami">👥 Ami·e</button>
-    <button class="chip" data-ctx="amoureux">💌 Amoureux·se</button>
-    <button class="chip" data-ctx="famille">👨‍👩‍👧 Famille</button>
-    <button class="chip" data-ctx="collègue">💼 Collègue</button>
-    <button class="chip" data-ctx="inconnu">🤷 Inconnu·e</button>
-  </div>
-
-  <label style="margin-top: 8px;">Le message reçu</label>
-  <textarea id="msgInput" placeholder="Ex : « C'est bon, fais comme tu veux. »&#10;Ex : « Ok, pas de problème. »&#10;Ex : « T'inquiète, j'ai compris. »"></textarea>
-
-  <button class="btn" id="analyzeBtn" onclick="analyze()">
-    <span>🔍</span> Décoder ce message
-  </button>
-</div>
-
-<div id="resultArea"></div>
-
-<script>
-  let selectedCtx = "ami";
-
-  document.querySelectorAll('.chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      selectedCtx = chip.dataset.ctx;
-    });
-  });
-
-  async function analyze() {
-    const msg = document.getElementById('msgInput').value.trim();
-    if (!msg) return;
-
-    const btn = document.getElementById('analyzeBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="dot-pulse"><span></span><span></span><span></span></span> Analyse en cours…';
-
-    document.getElementById('resultArea').innerHTML = `
-      <div class="result-card">
-        <div class="loading">
-          <div class="dot-pulse"><span></span><span></span><span></span></div>
-          Lecture entre les lignes…
-        </div>
-      </div>
-    `;
-
-    const prompt = `Tu es un expert en communication et psychologie des relations. Analyse ce message reçu dans le contexte d'une relation "${selectedCtx}".
-
-Message : "${msg}"
-
-Réponds UNIQUEMENT en JSON valide, sans balises markdown, sans explication, avec exactement cette structure :
-{
-  "vrai_sens": "Ce que la personne voulait vraiment dire en 1-2 phrases directes et honnêtes",
-  "emotion_cachee": "L'émotion principale que la personne ressent probablement",
-  "sous_entendu": "Le message implicite non-dit, formulé franchement",
-  "quoi_faire": "Un conseil concret sur comment réagir ou répondre",
-  "tension": 3
+  return {
+    vrai_sens: "Difficile de détecter un sous-entendu précis. Le message semble plutôt neutre.",
+    emotion: "😐 Ton neutre",
+    sous_entendu: "Pas de signal d'alarme évident, mais le contexte compte beaucoup.",
+    conseil: "Si quelque chose te chiffonne dans ce message, fais confiance à ton instinct et demande directement.",
+    tension: 2,
+  };
 }
 
-La valeur "tension" est un entier de 1 (neutre) à 5 (très tendu/conflictuel).
-Sois direct, honnête, parfois un peu cash. Pas de langue de bois.`;
+const tensionLabels = ["", "Tout va bien 👌", "Légèrement tendu 👀", "Clairement mal à l'aise 😬", "Situation tendue ⚠️", "C'est chaud 🔥"];
 
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{ role: "user", content: prompt }]
-        })
-      });
+export default function App() {
+  const [ctx, setCtx] = useState("ami");
+  const [msg, setMsg] = useState("");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-      const data = await res.json();
-      const raw = data.content.map(i => i.text || "").join("");
-      const clean = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
-
-      renderResult(msg, parsed);
-    } catch (err) {
-      document.getElementById('resultArea').innerHTML = `
-        <div class="result-card">
-          <div class="result-section">
-            <p style="color:var(--accent)">Une erreur s'est produite. Réessaie !</p>
-          </div>
-        </div>`;
-    }
-
-    btn.disabled = false;
-    btn.innerHTML = '<span>🔍</span> Décoder ce message';
+  function analyze() {
+    if (!msg.trim()) return;
+    setLoading(true);
+    setResult(null);
+    setTimeout(() => {
+      setResult(analyzeMessage(msg, ctx));
+      setLoading(false);
+    }, 1200);
   }
 
-  function renderResult(original, d) {
-    const dots = Array.from({length: 5}, (_, i) =>
-      `<div class="tone-dot ${i < d.tension ? 'active' : ''}"></div>`
-    ).join('');
+  return (
+    <div style={{
+      fontFamily: "'Georgia', serif",
+      background: "#f5f2ee",
+      minHeight: "100vh",
+      padding: "48px 20px 80px",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+    }}>
 
-    document.getElementById('resultArea').innerHTML = `
-      <div class="result-card">
-
-        <div class="result-section">
-          <div class="original-bubble">"${original}"</div>
-
-          <div class="tag red">💬 Ce qu'il/elle voulait vraiment dire</div>
-          <p>${d.vrai_sens}</p>
+      {/* Header */}
+      <div style={{ textAlign: "center", marginBottom: 40 }}>
+        <div style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", color: "#c8402a", fontFamily: "sans-serif", fontWeight: 600, marginBottom: 12 }}>
+          Analyse de message
         </div>
-
-        <div class="result-section">
-          <div class="tag orange">🎭 Émotion cachée</div>
-          <p>${d.emotion_cachee}</p>
-          <div class="divider"></div>
-          <div class="tag blue">🔍 Sous-entendu</div>
-          <p>${d.sous_entendu}</p>
-        </div>
-
-        <div class="result-section">
-          <div class="tag green">✅ Quoi faire</div>
-          <p>${d.quoi_faire}</p>
-          <div class="divider"></div>
-          <div style="font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Niveau de tension</div>
-          <div class="tone-bar">${dots}</div>
-          <div class="sub">${getTensionLabel(d.tension)}</div>
-        </div>
-
+        <h1 style={{ fontSize: "clamp(1.8rem, 5vw, 3rem)", fontWeight: "normal", lineHeight: 1.2, color: "#1a1714" }}>
+          Ce qu'ils voulaient<br />
+          <em style={{ color: "#c8402a" }}>vraiment</em> dire
+        </h1>
+        <p style={{ marginTop: 14, color: "#8a8179", fontSize: 15, fontFamily: "sans-serif", fontWeight: 300, maxWidth: 380, lineHeight: 1.6 }}>
+          Colle un message reçu. On te dit ce qui se cache vraiment derrière les mots.
+        </p>
       </div>
-    `;
-  }
 
-  function getTensionLabel(n) {
-    const labels = ["", "Tout va bien, pas de drama 👌", "Légèrement tendu, à surveiller 👀", "Clairement mal à l'aise 😬", "Situation tendue, attention ⚠️", "C'est chaud, agis vite 🔥"];
-    return labels[n] || "";
-  }
-</script>
+      {/* Card */}
+      <div style={{
+        background: "#fff",
+        border: "1px solid #e2ddd8",
+        borderRadius: 16,
+        padding: 32,
+        width: "100%",
+        maxWidth: 580,
+        boxShadow: "0 2px 20px rgba(0,0,0,0.04)",
+      }}>
+        <div style={{ fontSize: 11, fontFamily: "sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8a8179", marginBottom: 12 }}>
+          Contexte
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
+          {contexts.map(c => (
+            <button key={c.id} onClick={() => setCtx(c.id)} style={{
+              padding: "7px 16px",
+              borderRadius: 99,
+              border: ctx === c.id ? "1.5px solid #c8402a" : "1.5px solid #e2ddd8",
+              background: ctx === c.id ? "#c8402a" : "transparent",
+              color: ctx === c.id ? "white" : "#8a8179",
+              fontSize: 13,
+              fontFamily: "sans-serif",
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 0.15s",
+            }}>{c.label}</button>
+          ))}
+        </div>
 
-</body>
-</html>
+        <div style={{ fontSize: 11, fontFamily: "sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8a8179", marginBottom: 10 }}>
+          Le message reçu
+        </div>
+        <textarea
+          value={msg}
+          onChange={e => setMsg(e.target.value)}
+          placeholder={'Ex : « C\'est bon, fais comme tu veux. »\nEx : « Ok. »\nEx : « T\'inquiète, j\'ai compris. »'}
+          style={{
+            width: "100%",
+            minHeight: 120,
+            border: "1.5px solid #e2ddd8",
+            borderRadius: 10,
+            padding: 16,
+            fontFamily: "sans-serif",
+            fontSize: 15,
+            color: "#1a1714",
+            background: "#f5f2ee",
+            resize: "vertical",
+            outline: "none",
+            lineHeight: 1.6,
+            boxSizing: "border-box",
+          }}
+        />
+
+        <button onClick={analyze} disabled={!msg.trim() || loading} style={{
+          marginTop: 16,
+          width: "100%",
+          padding: 15,
+          background: !msg.trim() || loading ? "#e2ddd8" : "#c8402a",
+          color: "white",
+          border: "none",
+          borderRadius: 10,
+          fontFamily: "sans-serif",
+          fontSize: 15,
+          fontWeight: 500,
+          cursor: !msg.trim() || loading ? "not-allowed" : "pointer",
+          transition: "all 0.2s",
+        }}>
+          {loading ? "⏳ Lecture entre les lignes…" : "🔍 Décoder ce message"}
+        </button>
+      </div>
+
+      {/* Result */}
+      {result && (
+        <div style={{ width: "100%", maxWidth: 580, marginTop: 24 }}>
+
+          {/* Message original */}
+          <div style={{
+            background: "#fff",
+            border: "1px solid #e2ddd8",
+            borderRadius: 16,
+            padding: "24px 28px",
+            marginBottom: 12,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.03)",
+          }}>
+            <div style={{ background: "#f5f2ee", borderLeft: "3px solid #e2ddd8", borderRadius: 8, padding: "12px 16px", fontStyle: "italic", color: "#8a8179", fontSize: 14, fontFamily: "sans-serif", marginBottom: 16 }}>
+              "{msg}"
+            </div>
+            <Tag color="red">💬 Ce qu'il/elle voulait vraiment dire</Tag>
+            <p style={{ fontSize: 16, lineHeight: 1.65, color: "#1a1714", fontFamily: "sans-serif", margin: 0 }}>{result.vrai_sens}</p>
+          </div>
+
+          <div style={{
+            background: "#fff",
+            border: "1px solid #e2ddd8",
+            borderRadius: 16,
+            padding: "24px 28px",
+            marginBottom: 12,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.03)",
+          }}>
+            <Tag color="orange">🎭 Émotion cachée</Tag>
+            <p style={{ fontSize: 16, lineHeight: 1.65, color: "#1a1714", fontFamily: "sans-serif", margin: "0 0 16px" }}>{result.emotion}</p>
+            <div style={{ height: 1, background: "#e2ddd8", margin: "16px 0" }} />
+            <Tag color="blue">🔍 Sous-entendu</Tag>
+            <p style={{ fontSize: 16, lineHeight: 1.65, color: "#1a1714", fontFamily: "sans-serif", margin: 0 }}>{result.sous_entendu}</p>
+          </div>
+
+          <div style={{
+            background: "#fff",
+            border: "1px solid #e2ddd8",
+            borderRadius: 16,
+            padding: "24px 28px",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.03)",
+          }}>
+            <Tag color="green">✅ Quoi faire</Tag>
+            <p style={{ fontSize: 16, lineHeight: 1.65, color: "#1a1714", fontFamily: "sans-serif", margin: "0 0 16px" }}>{result.conseil}</p>
+            <div style={{ height: 1, background: "#e2ddd8", margin: "16px 0" }} />
+            <div style={{ fontSize: 11, fontFamily: "sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8a8179", marginBottom: 10 }}>
+              Niveau de tension
+            </div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              {[1,2,3,4,5].map(i => (
+                <div key={i} style={{
+                  width: 12, height: 12, borderRadius: "50%",
+                  background: i <= result.tension ? "#c8402a" : "#e2ddd8",
+                  transition: "background 0.3s",
+                }} />
+              ))}
+            </div>
+            <div style={{ fontSize: 13, color: "#8a8179", fontFamily: "sans-serif" }}>{tensionLabels[result.tension]}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Tag({ color, children }) {
+  const colors = {
+    red: { bg: "#fdf0ed", text: "#c8402a" },
+    blue: { bg: "#edf2ff", text: "#3455d1" },
+    green: { bg: "#edfaf3", text: "#1a7a4a" },
+    orange: { bg: "#fff7ed", text: "#c2610a" },
+  };
+  const c = colors[color];
+  return (
+    <div style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      fontSize: 11,
+      fontWeight: 600,
+      letterSpacing: "0.12em",
+      textTransform: "uppercase",
+      padding: "4px 12px",
+      borderRadius: 99,
+      marginBottom: 12,
+      background: c.bg,
+      color: c.text,
+      fontFamily: "sans-serif",
+    }}>{children}</div>
+  );
+}
+          
