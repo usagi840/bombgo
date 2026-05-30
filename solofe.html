@@ -106,16 +106,8 @@
   pointer-events: all;
 }
 
-    #joystick-zone {
-  position: absolute;
-  left: 0; top: 0;
-  width: 50%; height: 100%;
-  pointer-events: all;
-  display: flex;
-  align-items: flex-start;   /* ← en haut */
-  justify-content: center;
-  gap: 18px;
-  padding-top: 16px;
+    @media (pointer: coarse) {
+  #mobile-controls { display: block; }
     }
   </style>
 </head>
