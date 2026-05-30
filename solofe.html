@@ -63,7 +63,7 @@
       stroke-linejoin: round;
     }
 
-    #mobile-controls {
+  #mobile-controls {
   display: none;
   position: fixed;
   bottom: 0; left: 0; right: 0;
@@ -77,9 +77,10 @@
   width: 50%; height: 100%;
   pointer-events: all;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   gap: 18px;
+  padding-top: 16px;
 }
 .joy-btn {
   width: 72px; height: 72px;
@@ -96,19 +97,10 @@
   right: 0; top: 0;
   width: 50%; height: 100%;
   pointer-events: all;
-  display: flex; align-items: center; justify-content: center;
 }
-    
-#jump-zone {
-  position: absolute;
-  right: 0; top: 0;
-  width: 50%; height: 100%;
-  pointer-events: all;
-}
-
-    @media (pointer: coarse) {
+@media (pointer: coarse) {
   #mobile-controls { display: block; }
-    }
+}
   </style>
 </head>
 <body>
