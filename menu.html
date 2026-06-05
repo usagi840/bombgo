@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Menu</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #333;
+      color: white;
+      font-family: Arial;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .layout {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── CÔTÉ GAUCHE ── */
+    .left-panel {
+      width: 60%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 12px;
+      gap: 10px;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .top-bar img {
+      width: 90px;
+      cursor: pointer;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+      justify-content: center;
+    }
+
+    .buttons img {
+      width: 100%;
+      max-height: 18vh;
+      object-fit: contain;
+      cursor: pointer;
+      transition: transform 0.1s ease, filter 0.1s ease;
+    }
+
+    .buttons img:hover {
+      transform: scale(1.03);
+      filter: brightness(1.15);
+    }
+
+    /* ── CÔTÉ DROIT ── */
+    .right-panel {
+      width: 40%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 12px 12px 0 0;
+      gap: 0;
+      position: relative;
+    }
+
+    .personnage-wrap {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .personnage-wrap img {
+      max-width: 75%;
+      max-height: 65vh;
+      object-fit: contain;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .ile-wrap {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+
+    .ile-wrap img {
+      width: 90%;
+      object-fit: contain;
+      user-select: none;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="layout">
+
+    <!-- GAUCHE -->
+    <div class="left-panel">
+      <div class="top-bar">
+        <img src="assets/logoretour.png" onclick="window.location.href='./index.html'">
+        <img src="assets/logoparametre.png" onclick="window.location.href='./parametre.html'">
+      </div>
+
+      <div class="buttons">
+        <img src="assets/logosolo.png" onclick="window.location.href='solo.html'">
+        <img src="assets/logoniveaux.png" onclick="window.location.href='./niv1a10.html'">
+        <img src="assets/logoediteur.png" onclick="window.location.href='editeur.html'">
+        <img src="assets/logomesniveaux.png" onclick="window.location.href='mesniveaux.html'">
+      </div>
+    </div>
+
+    <!-- DROITE -->
+    <div class="right-panel">
+      <div class="personnage-wrap">
+        <img id="perso" src="assets/personnage1.png" alt="Personnage">
+      </div>
+      <div class="ile-wrap">
+        <img src="assets/platformehobby.png" alt="Île">
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Charger le personnage sélectionné
+    const selectedChar = localStorage.getItem('selectedCharacter') || '1';
+    document.getElementById('perso').src = `assets/personnage${selectedChar}.png`;
+  </script>
+
+</body>
+
+</html>
