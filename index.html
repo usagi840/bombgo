@@ -35,26 +35,27 @@
       display: flex;
       flex-direction: column;
       padding: 12px;
-      gap: 10px;
-      position: relative; /* nécessaire pour le positionnement absolu */
+      position: relative;
     }
 
-    .top-bar {
+    /* BOUTON RETOUR */
+    .btn-retour {
       position: absolute;
       top: 12px;
       left: 12px;
-      right: 12px;
-
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-
+      width: 90px;
+      cursor: pointer;
       z-index: 1000;
     }
 
-    .top-bar img {
+    /* BOUTON PARAMÈTRES */
+    .btn-parametre {
+      position: absolute;
+      top: 12px;
+      right: 12px;
       width: 90px;
       cursor: pointer;
+      z-index: 1000;
     }
 
     .buttons {
@@ -88,7 +89,6 @@
       align-items: center;
       justify-content: flex-end;
       padding: 12px 12px 0 0;
-      gap: 0;
       position: relative;
     }
 
@@ -124,18 +124,19 @@
 </head>
 
 <body>
+
   <div class="layout">
 
     <!-- GAUCHE -->
     <div class="left-panel">
 
-      <div class="top-bar">
-        <img src="assets/logoretour.png"
-             onclick="window.location.href='./index.html'">
+      <img class="btn-retour"
+           src="assets/logoretour.png"
+           onclick="window.location.href='./index.html'">
 
-        <img src="assets/logoparametre.png"
-             onclick="window.location.href='./parametre.html'">
-      </div>
+      <img class="btn-parametre"
+           src="assets/logoparametre.png"
+           onclick="window.location.href='./parametre.html'">
 
       <div class="buttons">
         <img src="assets/logosolo.png"
@@ -172,12 +173,12 @@
   </div>
 
   <script>
-    // Charger le personnage sélectionné
     const selectedChar =
       localStorage.getItem('selectedCharacter') || '1';
 
     document.getElementById('perso').src =
       `assets/personnage${selectedChar}.png`;
   </script>
+
 </body>
 </html>
