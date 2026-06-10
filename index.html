@@ -33,14 +33,14 @@
       width: 60%;
       height: 100%;
       position: relative;
-      padding: 12px;
+      padding: 0; /* important pour éviter décalage */
     }
 
-    /* CONTENEURS BOUTONS HAUT */
+    /* BOUTON RETOUR */
     .btn-retour,
     .btn-parametre {
       position: absolute;
-      top: 12px;
+      top: 0; /* collé au haut proprement */
       width: 90px;
       height: 90px;
 
@@ -51,8 +51,13 @@
       z-index: 1000;
     }
 
-    .btn-retour { left: 12px; }
-    .btn-parametre { right: 12px; }
+    .btn-retour {
+      left: 12px;
+    }
+
+    .btn-parametre {
+      right: 12px;
+    }
 
     .btn-retour img,
     .btn-parametre img {
@@ -60,6 +65,7 @@
       height: 100%;
       object-fit: contain;
       cursor: pointer;
+      display: block;
     }
 
     /* BOUTONS CENTRAUX */
@@ -69,6 +75,7 @@
       flex-direction: column;
       justify-content: center;
       gap: 10px;
+      padding: 12px;
     }
 
     .buttons img {
