@@ -112,23 +112,6 @@
       user-select: none;
       pointer-events: none;
     }
-
-    #btn-fullscreen {
-  position: fixed;
-  top: 14px; right: 14px;
-  width: 44px; height: 44px;
-  background: rgba(41,21,21,0.85);
-  border: 2px solid #8b5c5c;
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  z-index: 9999;
-}
-#btn-fullscreen svg {
-  width: 22px; height: 22px;
-  fill: none; stroke: #e8c8a0;
-  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
-}
   </style>
 </head>
 
@@ -161,40 +144,12 @@
       </div>
     </div>
 
-    <button id="btn-fullscreen" onclick="toggleFullscreen()">
-  <svg id="icon-expand" viewBox="0 0 24 24">
-    <polyline points="15 3 21 3 21 9"/>
-    <polyline points="9 21 3 21 3 15"/>
-    <line x1="21" y1="3" x2="14" y2="10"/>
-    <line x1="3" y1="21" x2="10" y2="14"/>
-  </svg>
-  <svg id="icon-compress" viewBox="0 0 24 24" style="display:none;">
-    <polyline points="4 14 10 14 10 20"/>
-    <polyline points="20 10 14 10 14 4"/>
-    <line x1="10" y1="14" x2="3" y2="21"/>
-    <line x1="21" y1="3" x2="14" y2="10"/>
-  </svg>
-    </button>
-
   </div>
 
   <script>
     // Charger le personnage sélectionné
     const selectedChar = localStorage.getItem('selectedCharacter') || '1';
     document.getElementById('perso').src = `assets/personnage${selectedChar}.png`;
-
-    function toggleFullscreen() {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen();
-  } else {
-    document.exitFullscreen();
-  }
-}
-document.addEventListener('fullscreenchange', () => {
-  const isFS = !!document.fullscreenElement;
-  document.getElementById('icon-expand').style.display   = isFS ? 'none'  : 'block';
-  document.getElementById('icon-compress').style.display = isFS ? 'block' : 'none';
-});
   </script>
 
 </body>
