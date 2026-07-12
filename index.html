@@ -51,13 +51,11 @@
   let playerNickname = localStorage.getItem("playerNickname") || "player";
 
   // ==== Variables globales ====
-  var player1, player2, stars, bombs, platforms, debugText;
-  var score = 0, scoreText;
-  var lives = 3, lifeIcons = [];
-  var gameOver = false;
-  var currentLevel = 0;
-  var platformsArray = [];
-  var tremplin = null;
+  var player1, player2, stars, bombs, platforms, debugText, joinText;
+  var joinScreen = true;
+  var player1Pad = null, player2Pad = null;
+  var player1Jump = null, player2Jump = null;
+  var prevButtons = {};
 
   // ==== Layout des niveaux ====
   var platformLayouts = [
@@ -100,8 +98,8 @@
     this.add.image(400,300,'sky');
     scoreText = this.add.text(16,16,'Score: 0',{fontSize:'32px',fill:'#000'});
 
-    debugText = this.add.text(16, 100, '', {fontSize:'22px', fill:'#ffffff', backgroundColor:'#ff0000', padding:{x:10,y:5}});
-    debugText.setDepth(1000);
+    joinText = this.add.text(400, 300, 'Joueur 1 : appuie sur ton bouton de saut\nJoueur 2 : appuie sur ton bouton de saut', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
+    joinText.setDepth(1000);
 
     for(let i=0;i<lives;i++) lifeIcons.push(this.add.image(40+i*45,70,'vie').setScale(0.02));
 
@@ -137,47 +135,73 @@
     this.physics.add.collider(player2, bombs, hitBomb, null, this);
   }
 
-  function update(){
-    if(gameOver) return;
+function update(){
+  if(gameOver) return;
 
-    // ==== DEBUG : affiche TOUTES les manettes vues par la page (index 0 à 3) ====
-    const gp = this.input.gamepad;
-    const allPads = gp ? gp.gamepads : [];
-    let info = 'Manettes vues: ';
-    allPads.forEach((p, i) => { if(p) info += '[' + i + '] '; });
-    debugText.setText(info || 'Aucune manette vue par la page');
-    // ==== FIN DEBUG ====
+  const gp = this.input.gamepad;
+  const allPads = gp ? gp.gamepads : [];
 
-    const pad1 = allPads[0];
-    const pad2 = allPads[1];
-
-    movePlayer(player1, pad1, 'left1', 'turn1', 'right1', 13);
-    movePlayer(player2, pad2, 'left2', 'turn2', 'right2', 1);
+  if(joinScreen){
+    handleJoinScreen.call(this, allPads);
+    return;
   }
 
-  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex){
+  movePlayer(player1, allPads[player1Pad], 'left1', 'turn1', 'right1', player1Jump);
+  movePlayer(player2, allPads[player2Pad], 'left2', 'turn2', 'right2', player2Jump);
+}
+
+function handleJoinScreen(allPads){
+  allPads.forEach((pad, index) => {
     if(!pad) return;
+    if(index === player1Pad || index === player2Pad) return;
 
-    const deadzone = 0.2;
-    let moveX = 0;
-    const stickValue = pad.leftStick.y;
-    if(Math.abs(stickValue) > deadzone) moveX = stickValue;
+    pad.buttons.forEach((b, btnIndex) => {
+      const key = index + '_' + btnIndex;
+      const wasPressed = prevButtons[key] || false;
+      if(b.pressed && !wasPressed){
+        if(player1Pad === null){ player1Pad = index; player1Jump = btnIndex; }
+        else if(player2Pad === null){ player2Pad = index; player2Jump = btnIndex; }
+      }
+      prevButtons[key] = b.pressed;
+    });
+  });
 
-    if(moveX < 0){
-      player.setVelocityX(-160);
-      player.anims.play(leftAnim, true);
-    } else if(moveX > 0){
-      player.setVelocityX(160);
-      player.anims.play(rightAnim, true);
-    } else {
-      player.setVelocityX(0);
-      player.anims.play(turnAnim);
-    }
-
-    if(pad.buttons[jumpButtonIndex] && pad.buttons[jumpButtonIndex].pressed && player.body.touching.down){
-      player.setVelocityY(-330);
-    }
+  if(player1Pad !== null && player2Pad !== null){
+    joinScreen = false;
+    joinText.setText('');
+  } else {
+    joinText.setText(
+      (player1Pad === null ? 'Joueur 1 : appuie sur ton bouton de saut\n' : 'Joueur 1 prêt !\n') +
+      (player2Pad === null ? 'Joueur 2 : appuie sur ton bouton de saut' : 'Joueur 2 prêt !')
+    );
   }
+}
+
+function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex){
+  if(!pad) return;
+
+  const deadzone = 0.2;
+  let moveX = 0;
+  const x = pad.leftStick.x;
+  const y = pad.leftStick.y;
+  const stickValue = Math.abs(x) > Math.abs(y) ? x : y;
+  if(Math.abs(stickValue) > deadzone) moveX = stickValue;
+
+  if(moveX < 0){
+    player.setVelocityX(-160);
+    player.anims.play(leftAnim, true);
+  } else if(moveX > 0){
+    player.setVelocityX(160);
+    player.anims.play(rightAnim, true);
+  } else {
+    player.setVelocityX(0);
+    player.anims.play(turnAnim);
+  }
+
+  if(pad.buttons[jumpButtonIndex] && pad.buttons[jumpButtonIndex].pressed && player.body.touching.down){
+    player.setVelocityY(-330);
+  }
+}
 
   function collectStar(player, star){
     star.disableBody(true,true);
