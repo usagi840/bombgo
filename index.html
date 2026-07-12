@@ -134,7 +134,7 @@ function update(){
   if(pad1){
     const stickValue = pad1.leftStick.y; // axe vertical du capteur = gauche/droite quand tenu à l'horizontale
     const deadzone = 0.2;
-    if(Math.abs(stickValue) > deadzone) moveX = -stickValue; // signe "-" à retirer si le sens est inversé
+    if(Math.abs(stickValue) > deadzone) moveX = stickValue; // signe "-" à retirer si le sens est inversé
   }
 
   if(moveX < 0){
@@ -148,7 +148,7 @@ function update(){
     player.anims.play('turn');
   }
 
-  if(pad1 && pad1.A && player.body.touching.down){
+if(pad1 && pad1.buttons[0].pressed && player.body.touching.down){
     player.setVelocityY(-330);
   }
 }
