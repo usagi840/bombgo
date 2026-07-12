@@ -126,16 +126,31 @@
   }
 
 function update(){
-    const pad1 = this.input.gamepad && this.input.gamepad.gamepads[0];
-    if(pad1){
-      console.log("Joystick X:", pad1.leftStick.x, "Bouton A:", pad1.A);
-    }
+  if(gameOver) return;
 
-    if(gameOver) return;
-    if(cursors.left.isDown){ player.setVelocityX(-160); player.anims.play('left',true);}
-    else if(cursors.right.isDown){ player.setVelocityX(160); player.anims.play('right',true);}
-    else { player.setVelocityX(0); player.anims.play('turn'); }
-    if(cursors.up.isDown && player.body.touching.down) player.setVelocityY(-330);
+  const pad1 = this.input.gamepad && this.input.gamepad.gamepads[0];
+
+  let moveX = 0;
+  if(pad1){
+    const stickValue = pad1.leftStick.y; // axe vertical du capteur = gauche/droite quand tenu à l'horizontale
+    const deadzone = 0.2;
+    if(Math.abs(stickValue) > deadzone) moveX = -stickValue; // signe "-" à retirer si le sens est inversé
+  }
+
+  if(moveX < 0){
+    player.setVelocityX(-160);
+    player.anims.play('left', true);
+  } else if(moveX > 0){
+    player.setVelocityX(160);
+    player.anims.play('right', true);
+  } else {
+    player.setVelocityX(0);
+    player.anims.play('turn');
+  }
+
+  if(pad1 && pad1.A && player.body.touching.down){
+    player.setVelocityY(-330);
+  }
 }
 
   function collectStar(player, star){
