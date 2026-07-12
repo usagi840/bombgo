@@ -79,7 +79,7 @@
     width: 800,
     height: 600,
     physics: { default: 'arcade', arcade: { gravity:{y:300}, debug:false } },
-    input: { preload: true },
+    input: { gamepad: true },
     scene: { preload, create, update }
   };
   new Phaser.Game(config);
@@ -125,9 +125,8 @@
     this.physics.add.collider(player, bombs, hitBomb, null, this);
   }
 
-  function update(){
-    const pads = this.input.gamepad.gamepads;
-    const pad1 = pads[0];
+function update(){
+    const pad1 = this.input.gamepad && this.input.gamepad.gamepads[0];
     if(pad1){
       console.log("Joystick X:", pad1.leftStick.x, "Bouton A:", pad1.A);
     }
@@ -137,7 +136,7 @@
     else if(cursors.right.isDown){ player.setVelocityX(160); player.anims.play('right',true);}
     else { player.setVelocityX(0); player.anims.play('turn'); }
     if(cursors.up.isDown && player.body.touching.down) player.setVelocityY(-330);
-  }
+}
 
   function collectStar(player, star){
     star.disableBody(true,true);
