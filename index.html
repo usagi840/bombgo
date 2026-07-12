@@ -128,12 +128,6 @@
 function update(){
   const pad1 = this.input.gamepad && this.input.gamepad.gamepads[0];
 
-  if(pad1){
-    let pressedButtons = [];
-    pad1.buttons.forEach((b, i) => { if(b.pressed) pressedButtons.push(i); });
-    debugText.setText('Boutons appuyés: ' + pressedButtons.join(', '));
-  }
-
   if(gameOver) return;
 
   let moveX = 0;
@@ -154,9 +148,9 @@ function update(){
     player.anims.play('turn');
   }
 
-if(pad1 && pad1.buttons[13].pressed && player.body.touching.down){
-  player.setVelocityY(-330);
-}
+  if(pad1 && pad1.buttons[13].pressed && player.body.touching.down){
+    player.setVelocityY(-330);
+  }
 }
 
   function collectStar(player, star){
