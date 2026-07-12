@@ -108,8 +108,9 @@
     joinText = this.add.text(400, 300, 'Joueur 1 : appuie sur ton bouton de saut\nJoueur 2 : appuie sur ton bouton de saut', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
     joinText.setDepth(1000);
 
-    debugText = this.add.text(16, 550, '', {fontSize:'18px', fill:'#fff', backgroundColor:'#000', padding:{x:8,y:4}});
+    debugText = this.add.text(16, 500, '', {fontSize:'16px', fill:'#fff', backgroundColor:'#000', padding:{x:8,y:4}});
     debugText.setDepth(1000);
+    debugText.setLineSpacing(4);
 
     for(let i=0;i<lives;i++) lifeIcons.push(this.add.image(40+i*45,70,'vie').setScale(0.02));
 
@@ -145,45 +146,38 @@
     this.physics.add.collider(player2, bombs, hitBomb, null, this);
   }
 
-function update(){
-  if(gameOver) return;
+  function update(){
+    if(gameOver) return;
 
-  const gp = this.input.gamepad;
-  const allPads = gp ? gp.gamepads : [];
+    const gp = this.input.gamepad;
+    const allPads = gp ? gp.gamepads : [];
 
-  if(joinScreen){
-    handleJoinScreen.call(this, allPads);
-    return;
+    if(joinScreen){
+      handleJoinScreen.call(this, allPads);
+      return;
+    }
+
+    const pad1 = allPads[player1Pad];
+    const pad2 = allPads[player2Pad];
+
+    let debug = '';
+    if(pad1){
+      let axesStr = pad1.axes.map((a,i)=>i+':'+a.toFixed(2)).join(' ');
+      let btnsStr = pad1.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
+      debug += 'P1 axes['+axesStr+'] btns['+btnsStr+']\n';
+    }
+    if(pad2){
+      let axesStr = pad2.axes.map((a,i)=>i+':'+a.toFixed(2)).join(' ');
+      let btnsStr = pad2.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
+      debug += 'P2 axes['+axesStr+'] btns['+btnsStr+']';
+    }
+    debugText.setText(debug);
+
+    movePlayer(player1, pad1, 'left1', 'turn1', 'right1', player1Jump);
+    movePlayer(player2, pad2, 'left2', 'turn2', 'right2', player2Jump);
   }
-
-  const pad1 = allPads[player1Pad];
-  const pad2 = allPads[player2Pad];
-
-  let debug = '';
-  if(pad1){
-    let pressed1 = [];
-    pad1.buttons.forEach((b,i)=>{ if(b.pressed) pressed1.push(i); });
-    debug += 'P1 x:'+pad1.leftStick.x.toFixed(2)+' y:'+pad1.leftStick.y.toFixed(2)+' btns:'+pressed1.join(',')+' | ';
-  }
-  if(pad2){
-    let pressed2 = [];
-    pad2.buttons.forEach((b,i)=>{ if(b.pressed) pressed2.push(i); });
-    debug += 'P2 x:'+pad2.leftStick.x.toFixed(2)+' y:'+pad2.leftStick.y.toFixed(2)+' btns:'+pressed2.join(',');
-  }
-  debugText.setText(debug);
-
-  movePlayer(player1, pad1, 'left1', 'turn1', 'right1', player1Jump);
-  movePlayer(player2, pad2, 'left2', 'turn2', 'right2', player2Jump);
-}
 
   function handleJoinScreen(allPads){
-let debug = '';
-allPads.forEach((pad, index) => {
-  if(!pad || index === player1Pad) return;
-  debug += 'Pad'+index+' mapping:'+pad.mapping+' nbBtns:'+pad.buttons.length+' | ';
-});
-debugText.setText(debug);
-
     allPads.forEach((pad, index) => {
       if(!pad) return;
       if(index === player1Pad || index === player2Pad) return;
