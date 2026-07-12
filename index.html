@@ -51,7 +51,7 @@
   let playerNickname = localStorage.getItem("playerNickname") || "player";
 
   // ==== Variables globales ====
-  var player, cursors, stars, bombs, platforms;
+  var player1, player2, stars, bombs, platforms;
   var score = 0, scoreText;
   var lives = 3, lifeIcons = [];
   var gameOver = false;
@@ -92,8 +92,8 @@
     this.load.image('vie','assets/vie1.png');
     this.load.image('novie','assets/vie2.png');
     this.load.image('tremplin','assets/tremplin.png');
-    const selectedChar = localStorage.getItem('selectedCharacter') || '1';
-    this.load.spritesheet('dude',`assets/personnageframe1.png`,{frameWidth:320, frameHeight:480});
+    this.load.spritesheet('dude1', 'assets/personnageframe1.png', {frameWidth:320, frameHeight:480});
+    this.load.spritesheet('dude2', 'assets/personnageframe2.png', {frameWidth:320, frameHeight:480});
   }
 
   function create(){
@@ -106,10 +106,16 @@
     platforms.create(400,568,'ground').setScale(2).refreshBody();
     createPlatformsForLevel(currentLevel);
 
-    player = this.physics.add.sprite(100,450,'dude').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
-    this.anims.create({key:'left', frames:this.anims.generateFrameNumbers('dude',{start:0,end:3}), frameRate:10, repeat:-1});
-    this.anims.create({key:'turn', frames:[{key:'dude',frame:4}], frameRate:20});
-    this.anims.create({key:'right', frames:this.anims.generateFrameNumbers('dude',{start:5,end:8}), frameRate:10, repeat:-1});
+    player1 = this.physics.add.sprite(100, 450, 'dude1').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
+    player2 = this.physics.add.sprite(700, 450, 'dude2').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
+
+    this.anims.create({key:'left1', frames:this.anims.generateFrameNumbers('dude1',{start:0,end:3}), frameRate:10, repeat:-1});
+    this.anims.create({key:'turn1', frames:[{key:'dude1',frame:4}], frameRate:20});
+    this.anims.create({key:'right1', frames:this.anims.generateFrameNumbers('dude1',{start:5,end:8}), frameRate:10, repeat:-1});
+
+    this.anims.create({key:'left2', frames:this.anims.generateFrameNumbers('dude2',{start:0,end:3}), frameRate:10, repeat:-1});
+    this.anims.create({key:'turn2', frames:[{key:'dude2',frame:4}], frameRate:20});
+    this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude2',{start:5,end:8}), frameRate:10, repeat:-1});
 
     cursors = this.input.keyboard.createCursorKeys();
 
@@ -118,37 +124,46 @@
 
     bombs = this.physics.add.group();
 
-    this.physics.add.collider(player, platforms);
+    this.physics.add.collider(player1, platforms);
+    this.physics.add.collider(player2, platforms);
     this.physics.add.collider(stars, platforms);
     this.physics.add.collider(bombs, platforms);
-    this.physics.add.overlap(player, stars, collectStar, null, this);
-    this.physics.add.collider(player, bombs, hitBomb, null, this);
+    this.physics.add.overlap(player1, stars, collectStar, null, this);
+    this.physics.add.overlap(player2, stars, collectStar, null, this);
+    this.physics.add.collider(player1, bombs, hitBomb, null, this);
+    this.physics.add.collider(player2, bombs, hitBomb, null, this);
   }
 
 function update(){
-  const pad1 = this.input.gamepad && this.input.gamepad.gamepads[0];
-
   if(gameOver) return;
 
+  const pad1 = this.input.gamepad && this.input.gamepad.gamepads[0];
+  const pad2 = this.input.gamepad && this.input.gamepad.gamepads[1];
+
+  movePlayer(player1, pad1, 'left1', 'turn1', 'right1', 13);
+  movePlayer(player2, pad2, 'left2', 'turn2', 'right2', 1);
+}
+
+function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex){
+  if(!pad) return;
+
+  const deadzone = 0.2;
   let moveX = 0;
-  if(pad1){
-    const stickValue = pad1.leftStick.y;
-    const deadzone = 0.2;
-    if(Math.abs(stickValue) > deadzone) moveX = stickValue;
-  }
+  const stickValue = pad.leftStick.y;
+  if(Math.abs(stickValue) > deadzone) moveX = stickValue;
 
   if(moveX < 0){
     player.setVelocityX(-160);
-    player.anims.play('left', true);
+    player.anims.play(leftAnim, true);
   } else if(moveX > 0){
     player.setVelocityX(160);
-    player.anims.play('right', true);
+    player.anims.play(rightAnim, true);
   } else {
     player.setVelocityX(0);
-    player.anims.play('turn');
+    player.anims.play(turnAnim);
   }
 
-  if(pad1 && pad1.buttons[13].pressed && player.body.touching.down){
+  if(pad.buttons[jumpButtonIndex] && pad.buttons[jumpButtonIndex].pressed && player.body.touching.down){
     player.setVelocityY(-330);
   }
 }
