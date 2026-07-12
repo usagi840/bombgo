@@ -34,6 +34,11 @@ var gameOver = false;
 // Références stables des manettes, assignées une seule fois à la connexion
 var pad1 = null, pad2 = null;
 
+// Overlay de debug (appuyer sur D pour afficher/masquer)
+var debugText = null;
+var debugOn = false;
+var dKey = null;
+
 var config = {
   type: Phaser.AUTO,
   width: 800,
@@ -96,8 +101,12 @@ function create(){
   this.physics.add.collider(player1, bombs, hitBomb, null, this);
   this.physics.add.collider(player2, bombs, hitBomb, null, this);
 
+  // --- Debug overlay ---
+  debugText = this.add.text(16, 500, '', { fontSize: '14px', fill: '#00ff00', backgroundColor: '#000000aa' });
+  debugText.setVisible(false);
+  dKey = this.input.keyboard.addKey('D');
+
   // --- Gestion des manettes ---
-  // Récupère celles déjà connectées avant que la scène ne démarre
   this.input.gamepad.gamepads.forEach(p => {
     if (p) {
       if (!pad1) pad1 = p;
@@ -105,7 +114,6 @@ function create(){
     }
   });
 
-  // Écoute les connexions futures (ex: manette activée après le 1er bouton pressé)
   this.input.gamepad.on('connected', function (pad) {
     if (!pad1) {
       pad1 = pad;
@@ -116,7 +124,6 @@ function create(){
     }
   });
 
-  // Nettoyage si une manette est débranchée
   this.input.gamepad.on('disconnected', function (pad) {
     if (pad === pad1) pad1 = null;
     if (pad === pad2) pad2 = null;
@@ -124,29 +131,64 @@ function create(){
 }
 
 function update(){
+  if (Phaser.Input.Keyboard.JustDown(dKey)) {
+    debugOn = !debugOn;
+    debugText.setVisible(debugOn);
+  }
+
+  if (debugOn) {
+    debugText.setText(getDebugInfo());
+  }
+
   if(gameOver) return;
 
   movePlayer(player1, pad1, 'left1', 'turn1', 'right1');
   movePlayer(player2, pad2, 'left2', 'turn2', 'right2');
 }
 
+function getDebugInfo(){
+  let lines = [];
+  [pad1, pad2].forEach((pad, i) => {
+    if (!pad) { lines.push(`Manette ${i+1}: non connectée`); return; }
+    let axes = pad.axes.map((a,idx) => `ax${idx}=${a.getValue().toFixed(2)}`).join(' ');
+    let pressedBtns = [];
+    pad.buttons.forEach((b, idx) => { if (b.pressed) pressedBtns.push(idx); });
+    lines.push(`Manette ${i+1} (${pad.id.slice(0,30)})`);
+    lines.push(`  ${axes}`);
+    lines.push(`  boutons appuyés: [${pressedBtns.join(',')}]`);
+  });
+  lines.push('(D pour cacher ce debug)');
+  return lines.join('\n');
+}
+
 function movePlayer(player, pad, leftAnim, turnAnim, rightAnim){
   if(!pad || !pad.connected) return;
 
-  const deadzone = 0.2;
+  const deadzone = 0.25;
 
-  // Axe horizontal du stick gauche (Axis object -> getValue())
-  const axisX = (pad.axes && pad.axes.length > 0) ? pad.axes[0].getValue() : 0;
+  // --- Détection auto de l'axe horizontal ---
+  // On prend l'axe qui a la plus grande valeur absolue au-dessus de la deadzone.
+  // Evite le problème "il faut tourner le joystick de 90°" (axe 0 vs axe 1 selon la manette).
+  let bestAxisValue = 0;
+  let bestAxisMag = 0;
+  if (pad.axes) {
+    for (let i = 0; i < pad.axes.length; i++) {
+      const v = pad.axes[i].getValue();
+      if (Math.abs(v) > bestAxisMag) {
+        bestAxisMag = Math.abs(v);
+        bestAxisValue = v;
+      }
+    }
+  }
 
-  // Fallback D-pad si les axes ne remontent pas de valeur exploitable
   const dpadLeft = pad.buttons[14] && pad.buttons[14].pressed;
   const dpadRight = pad.buttons[15] && pad.buttons[15].pressed;
 
-  if(axisX < -deadzone || dpadLeft){
+  if ((bestAxisMag > deadzone && bestAxisValue < 0) || dpadLeft) {
     player.setVelocityX(-160);
     player.anims.play(leftAnim, true);
   }
-  else if(axisX > deadzone || dpadRight){
+  else if ((bestAxisMag > deadzone && bestAxisValue > 0) || dpadRight) {
     player.setVelocityX(160);
     player.anims.play(rightAnim, true);
   }
@@ -155,8 +197,12 @@ function movePlayer(player, pad, leftAnim, turnAnim, rightAnim){
     player.anims.play(turnAnim);
   }
 
-  // Saut (bouton principal / A / Croix)
-  if(pad.buttons[0] && pad.buttons[0].pressed && player.body.touching.down){
+  // --- Saut : on teste plusieurs boutons courants (A/Croix, B/Rond, X/Carré, Y/Triangle) ---
+  // pour couvrir les manettes qui ne mappent pas le bouton 0 en premier.
+  const jumpButtons = [0, 1, 2, 3];
+  const jumpPressed = jumpButtons.some(idx => pad.buttons[idx] && pad.buttons[idx].pressed);
+
+  if (jumpPressed && player.body.touching.down) {
     player.setVelocityY(-330);
   }
 }
