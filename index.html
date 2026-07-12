@@ -51,7 +51,7 @@
   let playerNickname = localStorage.getItem("playerNickname") || "player";
 
   // ==== Variables globales ====
-  var player1, player2, stars, bombs, platforms;
+  var player1, player2, stars, bombs, platforms, debugText;
   var score = 0, scoreText;
   var lives = 3, lifeIcons = [];
   var gameOver = false;
@@ -100,6 +100,9 @@
     this.add.image(400,300,'sky');
     scoreText = this.add.text(16,16,'Score: 0',{fontSize:'32px',fill:'#000'});
 
+    debugText = this.add.text(16, 100, '', {fontSize:'24px', fill:'#ffffff', backgroundColor:'#ff0000', padding:{x:10,y:5}});
+    debugText.setDepth(1000);
+
     for(let i=0;i<lives;i++) lifeIcons.push(this.add.image(40+i*45,70,'vie').setScale(0.02));
 
     platforms = this.physics.add.staticGroup();
@@ -139,6 +142,7 @@ function update(){
 
   const pad1 = this.input.gamepad && this.input.gamepad.gamepads[0];
   const pad2 = this.input.gamepad && this.input.gamepad.gamepads[1];
+  debugText.setText('Pad1: ' + (pad1 ? 'OK' : 'absent') + ' | Pad2: ' + (pad2 ? 'OK' : 'absent'));
 
   movePlayer(player1, pad1, 'left1', 'turn1', 'right1', 13);
   movePlayer(player2, pad2, 'left2', 'turn2', 'right2', 1);
