@@ -2,43 +2,36 @@
 
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Solo</title>
+<meta charset="UTF-8">
+<title>2 Joueurs</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
 
-  <style>
-    body {
-      margin: 0;
-      background-color: #413d3d;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    canvas { border: 4px solid #291515; }
-  </style>
+<style>
+body {
+  margin:0;
+  background:#413d3d;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+}
+canvas { border:4px solid #291515; }
+</style>
 
 </head>
-<body>
 
-<div id="game-wrapper"></div>
+<body>
+<div id="game"></div>
 
 <script>
-var player1, player2, stars, bombs, platforms, joinText;
-var score = 0, scoreText;
-var gameOver = false;
-
-var joinScreen = true;
-var player1Pad = null, player2Pad = null;
-var player1Jump = 0, player2Jump = 0;
-var prevButtons = {};
+var player1, player2, platforms;
 
 var config = {
   type: Phaser.AUTO,
   width: 800,
   height: 600,
-  physics: { default: 'arcade', arcade: { gravity:{y:300} } },
+  physics: { default:'arcade', arcade:{ gravity:{y:300} } },
   input: { gamepad: true },
   scene: { preload, create, update }
 };
@@ -48,8 +41,6 @@ new Phaser.Game(config);
 function preload(){
   this.load.image('sky','assets/sky.png');
   this.load.image('ground','assets/platform.png');
-  this.load.image('star','assets/piece1.png');
-  this.load.image('bomb','assets/bombe.png');
   this.load.spritesheet('dude1','assets/personnageframe1.png',{frameWidth:320,frameHeight:480});
   this.load.spritesheet('dude2','assets/personnageframe2.png',{frameWidth:320,frameHeight:480});
 }
@@ -57,106 +48,41 @@ function preload(){
 function create(){
   this.add.image(400,300,'sky');
 
-  scoreText = this.add.text(16,16,'Score: 0',{fontSize:'32px',fill:'#000'});
-
-  joinText = this.add.text(400,300,
-    'Joueur 1 : appuie\nJoueur 2 : appuie',
-    {fontSize:'24px',fill:'#000',align:'center'}
-  ).setOrigin(0.5);
-
   platforms = this.physics.add.staticGroup();
   platforms.create(400,568,'ground').setScale(2).refreshBody();
 
-  player1 = this.physics.add.sprite(100,450,'dude1').setScale(0.125);
-  player2 = this.physics.add.sprite(700,450,'dude2').setScale(0.125);
-
-  stars = this.physics.add.group({
-    key:'star',
-    repeat:11,
-    setXY:{x:12,y:0,stepX:70}
-  });
-
-  bombs = this.physics.add.group();
+  player1 = this.physics.add.sprite(100,450,'dude1').setScale(0.125).setCollideWorldBounds(true);
+  player2 = this.physics.add.sprite(700,450,'dude2').setScale(0.125).setCollideWorldBounds(true);
 
   this.physics.add.collider(player1, platforms);
   this.physics.add.collider(player2, platforms);
 }
 
 function update(){
-  if(gameOver) return;
-
   const pads = this.input.gamepad.gamepads;
 
-  if(joinScreen){
-    handleJoin(pads);
-    return;
-  }
+  const pad1 = pads[0] || null;
+  const pad2 = pads[1] || null;
 
-  const pad1 = pads[player1Pad] || null;
-  const pad2 = pads[player2Pad] || null;
-
-  // Si manettes perdues → reset
-  if(!pad1 && !pad2){
-    joinScreen = true;
-    player1Pad = null;
-    player2Pad = null;
-    return;
-  }
-
-  movePlayer(player1, pad1, player1Jump);
-  movePlayer(player2, pad2, player2Jump);
+  move(player1, pad1);
+  move(player2, pad2);
 }
 
-function handleJoin(pads){
-  pads.forEach((pad,index)=>{
-    if(!pad) return;
-
-    pad.buttons.forEach((b,btnIndex)=>{
-      const key = index + '_' + btnIndex;
-      const wasPressed = prevButtons[key] || false;
-
-      if(b.pressed && !wasPressed){
-
-        if(player1Pad === null){
-          player1Pad = index;
-          player1Jump = btnIndex;
-        }
-        else if(player2Pad === null && index !== player1Pad){
-          player2Pad = index;
-          player2Jump = btnIndex;
-        }
-      }
-
-      prevButtons[key] = b.pressed;
-    });
-  });
-
-  if(player1Pad !== null && player2Pad !== null){
-    joinScreen = false;
-    joinText.setText('');
-  }
-}
-
-function movePlayer(player, pad, jumpBtn){
-  if(!pad || !pad.axes || !pad.buttons) return;
+function move(player, pad){
+  if(!pad || !pad.axes) return;
 
   const deadzone = 0.2;
-
-  const x = pad.axes.length > 0 ? pad.axes[0] : 0;
+  const x = pad.axes[0] || 0;
 
   if(x < -deadzone){
     player.setVelocityX(-160);
-  }
-  else if(x > deadzone){
+  } else if(x > deadzone){
     player.setVelocityX(160);
-  }
-  else{
+  } else {
     player.setVelocityX(0);
   }
 
-  if(pad.buttons[jumpBtn] &&
-     pad.buttons[jumpBtn].pressed &&
-     player.body.touching.down){
+  if(pad.buttons[0] && pad.buttons[0].pressed && player.body.touching.down){
     player.setVelocityY(-330);
   }
 }
