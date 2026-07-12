@@ -91,13 +91,13 @@
   function preload(){
     this.load.image('sky','assets/sky.png');
     this.load.image('ground','assets/platform.png');
-    this.load.image('star','assets/piece.png');
+    this.load.image('star','assets/piece1.png');
     this.load.image('bomb','assets/bombe.png');
     this.load.image('vie','assets/vie1.png');
     this.load.image('novie','assets/vie2.png');
     this.load.image('tremplin','assets/tremplin.png');
     const selectedChar = localStorage.getItem('selectedCharacter') || '1';
-    this.load.spritesheet('dude',`assets/personnageframe${selectedChar}.png`,{frameWidth:320, frameHeight:480});
+    this.load.spritesheet('dude',`assets/personnageframe1.png`,{frameWidth:320, frameHeight:480});
   }
 
   function create(){
