@@ -109,28 +109,43 @@ function update(){
 }
 
 function movePlayer(player, pad, leftAnim, turnAnim, rightAnim){
-  if(!pad || !pad.axes || !pad.buttons) return;
+if(!pad || !pad.axes || !pad.buttons) return;
 
-  const deadzone = 0.2;
-  const x = pad.axes[0] || 0;
+const deadzone = 0.2;
 
-  if(x < -deadzone){
-    player.setVelocityX(-160);
-    player.anims.play(leftAnim, true);
-  } 
-  else if(x > deadzone){
-    player.setVelocityX(160);
-    player.anims.play(rightAnim, true);
-  } 
-  else {
-    player.setVelocityX(0);
-    player.anims.play(turnAnim);
-  }
+// 🔥 TROUVER LE BON AXE (celui qui bouge le plus)
+let bestAxis = 0;
+let max = 0;
 
-  if(pad.buttons[0] && pad.buttons[0].pressed && player.body.touching.down){
-    player.setVelocityY(-330);
-  }
+for(let i = 0; i < pad.axes.length; i++){
+const val = Math.abs(pad.axes[i]);
+if(val > max){
+max = val;
+bestAxis = i;
 }
+}
+
+const x = pad.axes[bestAxis] || 0;
+
+if(x < -deadzone){
+player.setVelocityX(-160);
+player.anims.play(leftAnim, true);
+}
+else if(x > deadzone){
+player.setVelocityX(160);
+player.anims.play(rightAnim, true);
+}
+else {
+player.setVelocityX(0);
+player.anims.play(turnAnim);
+}
+
+// 🎮 SAUT (bouton principal)
+if(pad.buttons[0] && pad.buttons[0].pressed && player.body.touching.down){
+player.setVelocityY(-330);
+}
+}
+
 
 function collectStar(player, star){
   star.disableBody(true,true);
