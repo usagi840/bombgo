@@ -100,7 +100,8 @@
     this.add.image(400,300,'sky');
     scoreText = this.add.text(16,16,'Score: 0',{fontSize:'32px',fill:'#000'});
 
-    debugText = this.add.text(16, 550, '', {fontSize:'18px', fill:'#000'});
+debugText = this.add.text(16, 550, '', {fontSize:'18px', fill:'#000'});
+debugText.setDepth(1000);
 
     for(let i=0;i<lives;i++) lifeIcons.push(this.add.image(40+i*45,70,'vie').setScale(0.02));
 
