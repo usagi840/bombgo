@@ -51,7 +51,7 @@
   let playerNickname = localStorage.getItem("playerNickname") || "player";
 
   // ==== Variables globales ====
-  var player1, player2, cursors, stars, bombs, platforms, joinText;
+  var player1, player2, cursors, stars, bombs, platforms, joinText, debugText;
   var score = 0, scoreText;
   var lives = 3, lifeIcons = [];
   var gameOver = false;
@@ -108,6 +108,9 @@
     joinText = this.add.text(400, 300, 'Joueur 1 : appuie sur ton bouton de saut\nJoueur 2 : appuie sur ton bouton de saut', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
     joinText.setDepth(1000);
 
+    debugText = this.add.text(16, 550, '', {fontSize:'18px', fill:'#fff', backgroundColor:'#000', padding:{x:8,y:4}});
+    debugText.setDepth(1000);
+
     for(let i=0;i<lives;i++) lifeIcons.push(this.add.image(40+i*45,70,'vie').setScale(0.02));
 
     platforms = this.physics.add.staticGroup();
@@ -158,6 +161,19 @@
   }
 
   function handleJoinScreen(allPads){
+
+    function handleJoinScreen(allPads){
+  let debug = '';
+  allPads.forEach((pad, index) => {
+    if(!pad || index === player1Pad) return;
+    let pressed = [];
+    pad.buttons.forEach((b, i) => { if(b.pressed) pressed.push(i); });
+    debug += 'Pad'+index+': '+pressed.join(',')+' | ';
+  });
+  debugText.setText(debug);
+
+  // ... reste du code existant inchangé
+  
     allPads.forEach((pad, index) => {
       if(!pad) return;
       if(index === player1Pad || index === player2Pad) return;
