@@ -31,6 +31,9 @@ var score = 0, scoreText;
 var lives = 3, lifeIcons = [];
 var gameOver = false;
 
+// Références stables des manettes, assignées une seule fois à la connexion
+var pad1 = null, pad2 = null;
+
 var config = {
   type: Phaser.AUTO,
   width: 800,
@@ -92,60 +95,71 @@ function create(){
 
   this.physics.add.collider(player1, bombs, hitBomb, null, this);
   this.physics.add.collider(player2, bombs, hitBomb, null, this);
+
+  // --- Gestion des manettes ---
+  // Récupère celles déjà connectées avant que la scène ne démarre
+  this.input.gamepad.gamepads.forEach(p => {
+    if (p) {
+      if (!pad1) pad1 = p;
+      else if (!pad2 && p !== pad1) pad2 = p;
+    }
+  });
+
+  // Écoute les connexions futures (ex: manette activée après le 1er bouton pressé)
+  this.input.gamepad.on('connected', function (pad) {
+    if (!pad1) {
+      pad1 = pad;
+      console.log('Manette 1 connectée :', pad.id);
+    } else if (!pad2 && pad !== pad1) {
+      pad2 = pad;
+      console.log('Manette 2 connectée :', pad.id);
+    }
+  });
+
+  // Nettoyage si une manette est débranchée
+  this.input.gamepad.on('disconnected', function (pad) {
+    if (pad === pad1) pad1 = null;
+    if (pad === pad2) pad2 = null;
+  });
 }
 
 function update(){
   if(gameOver) return;
-
-  const pads = this.input.gamepad.gamepads;
-
-  const validPads = pads.filter(p => p && p.axes.length > 0);
-
-  const pad1 = validPads[0] || null;
-  const pad2 = validPads[1] || null;
 
   movePlayer(player1, pad1, 'left1', 'turn1', 'right1');
   movePlayer(player2, pad2, 'left2', 'turn2', 'right2');
 }
 
 function movePlayer(player, pad, leftAnim, turnAnim, rightAnim){
-if(!pad || !pad.axes || !pad.buttons) return;
+  if(!pad || !pad.connected) return;
 
-const deadzone = 0.2;
+  const deadzone = 0.2;
 
-// 🔥 TROUVER LE BON AXE (celui qui bouge le plus)
-let bestAxis = 0;
-let max = 0;
+  // Axe horizontal du stick gauche (Axis object -> getValue())
+  const axisX = (pad.axes && pad.axes.length > 0) ? pad.axes[0].getValue() : 0;
 
-for(let i = 0; i < pad.axes.length; i++){
-const val = Math.abs(pad.axes[i]);
-if(val > max){
-max = val;
-bestAxis = i;
-}
-}
+  // Fallback D-pad si les axes ne remontent pas de valeur exploitable
+  const dpadLeft = pad.buttons[14] && pad.buttons[14].pressed;
+  const dpadRight = pad.buttons[15] && pad.buttons[15].pressed;
 
-const x = pad.axes[bestAxis] || 0;
+  if(axisX < -deadzone || dpadLeft){
+    player.setVelocityX(-160);
+    player.anims.play(leftAnim, true);
+  }
+  else if(axisX > deadzone || dpadRight){
+    player.setVelocityX(160);
+    player.anims.play(rightAnim, true);
+  }
+  else {
+    player.setVelocityX(0);
+    player.anims.play(turnAnim);
+  }
 
-if(x < -deadzone){
-player.setVelocityX(-160);
-player.anims.play(leftAnim, true);
+  // Saut (bouton principal / A / Croix)
+  if(pad.buttons[0] && pad.buttons[0].pressed && player.body.touching.down){
+    player.setVelocityY(-330);
+  }
 }
-else if(x > deadzone){
-player.setVelocityX(160);
-player.anims.play(rightAnim, true);
-}
-else {
-player.setVelocityX(0);
-player.anims.play(turnAnim);
-}
-
-// 🎮 SAUT (bouton principal)
-if(pad.buttons[0] && pad.buttons[0].pressed && player.body.touching.down){
-player.setVelocityY(-330);
-}
-}
-
 
 function collectStar(player, star){
   star.disableBody(true,true);
