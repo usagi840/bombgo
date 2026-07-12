@@ -159,16 +159,23 @@
     const pad1 = allPads[player1Pad];
     const pad2 = allPads[player2Pad];
 
-    let debug = '';
+    let connectedIndexes = [];
+    allPads.forEach((p,i)=>{ if(p) connectedIndexes.push(i); });
+
+    let debug = 'P1Pad idx:'+player1Pad+' P2Pad idx:'+player2Pad+' | Connectees:'+connectedIndexes.join(',')+'\n';
     if(pad1){
       let axesStr = pad1.axes.map((a,i)=>i+':'+a.toFixed(2)).join(' ');
       let btnsStr = pad1.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
       debug += 'P1 axes['+axesStr+'] btns['+btnsStr+']\n';
+    } else {
+      debug += 'P1: pad absent\n';
     }
     if(pad2){
       let axesStr = pad2.axes.map((a,i)=>i+':'+a.toFixed(2)).join(' ');
       let btnsStr = pad2.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
       debug += 'P2 axes['+axesStr+'] btns['+btnsStr+']';
+    } else {
+      debug += 'P2: pad absent';
     }
     debugText.setText(debug);
 
