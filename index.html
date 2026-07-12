@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <title>Solo</title>
   <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
-  
+
   <!-- Phaser -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
-  
+
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -100,7 +100,7 @@
     this.add.image(400,300,'sky');
     scoreText = this.add.text(16,16,'Score: 0',{fontSize:'32px',fill:'#000'});
 
-    debugText = this.add.text(16, 100, '', {fontSize:'24px', fill:'#ffffff', backgroundColor:'#ff0000', padding:{x:10,y:5}});
+    debugText = this.add.text(16, 100, '', {fontSize:'22px', fill:'#ffffff', backgroundColor:'#ff0000', padding:{x:10,y:5}});
     debugText.setDepth(1000);
 
     for(let i=0;i<lives;i++) lifeIcons.push(this.add.image(40+i*45,70,'vie').setScale(0.02));
@@ -137,40 +137,47 @@
     this.physics.add.collider(player2, bombs, hitBomb, null, this);
   }
 
-function update(){
-  if(gameOver) return;
+  function update(){
+    if(gameOver) return;
 
-  const pad1 = this.input.gamepad && this.input.gamepad.gamepads[0];
-  const pad2 = this.input.gamepad && this.input.gamepad.gamepads[1];
-  debugText.setText('Pad1: ' + (pad1 ? 'OK' : 'absent') + ' | Pad2: ' + (pad2 ? 'OK' : 'absent'));
+    // ==== DEBUG : affiche TOUTES les manettes vues par la page (index 0 à 3) ====
+    const gp = this.input.gamepad;
+    const allPads = gp ? gp.gamepads : [];
+    let info = 'Manettes vues: ';
+    allPads.forEach((p, i) => { if(p) info += '[' + i + '] '; });
+    debugText.setText(info || 'Aucune manette vue par la page');
+    // ==== FIN DEBUG ====
 
-  movePlayer(player1, pad1, 'left1', 'turn1', 'right1', 13);
-  movePlayer(player2, pad2, 'left2', 'turn2', 'right2', 1);
-}
+    const pad1 = allPads[0];
+    const pad2 = allPads[1];
 
-function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex){
-  if(!pad) return;
-
-  const deadzone = 0.2;
-  let moveX = 0;
-  const stickValue = pad.leftStick.y;
-  if(Math.abs(stickValue) > deadzone) moveX = stickValue;
-
-  if(moveX < 0){
-    player.setVelocityX(-160);
-    player.anims.play(leftAnim, true);
-  } else if(moveX > 0){
-    player.setVelocityX(160);
-    player.anims.play(rightAnim, true);
-  } else {
-    player.setVelocityX(0);
-    player.anims.play(turnAnim);
+    movePlayer(player1, pad1, 'left1', 'turn1', 'right1', 13);
+    movePlayer(player2, pad2, 'left2', 'turn2', 'right2', 1);
   }
 
-  if(pad.buttons[jumpButtonIndex] && pad.buttons[jumpButtonIndex].pressed && player.body.touching.down){
-    player.setVelocityY(-330);
+  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex){
+    if(!pad) return;
+
+    const deadzone = 0.2;
+    let moveX = 0;
+    const stickValue = pad.leftStick.y;
+    if(Math.abs(stickValue) > deadzone) moveX = stickValue;
+
+    if(moveX < 0){
+      player.setVelocityX(-160);
+      player.anims.play(leftAnim, true);
+    } else if(moveX > 0){
+      player.setVelocityX(160);
+      player.anims.play(rightAnim, true);
+    } else {
+      player.setVelocityX(0);
+      player.anims.play(turnAnim);
+    }
+
+    if(pad.buttons[jumpButtonIndex] && pad.buttons[jumpButtonIndex].pressed && player.body.touching.down){
+      player.setVelocityY(-330);
+    }
   }
-}
 
   function collectStar(player, star){
     star.disableBody(true,true);
@@ -200,29 +207,26 @@ function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex)
   }
 
   function saveScore() {
-  const ref = db.collection("scores").doc(deviceId);
+    const ref = db.collection("scores").doc(deviceId);
 
-  ref.get().then(doc => {
-    if (!doc.exists) {
-      // Nouveau score
-      ref.set({ pseudo: playerNickname, score: score, date: Date.now() });
-      console.log("Nouveau score créé !");
-      return;
-    }
+    ref.get().then(doc => {
+      if (!doc.exists) {
+        ref.set({ pseudo: playerNickname, score: score, date: Date.now() });
+        console.log("Nouveau score créé !");
+        return;
+      }
 
-    const oldData = doc.data();
+      const oldData = doc.data();
 
-    if (score > oldData.score) {
-      // Score supérieur → mettre à jour
-      ref.set({ pseudo: playerNickname, score: score, date: Date.now() });
-      console.log("Score mis à jour !");
-    } else if (playerNickname !== oldData.pseudo) {
-      // Score inférieur mais pseudo changé → mettre à jour pseudo
-      ref.update({ pseudo: playerNickname });
-      console.log("Pseudo mis à jour !");
-    }
-  }).catch(err => console.error("Erreur saveScore:", err));
-}
+      if (score > oldData.score) {
+        ref.set({ pseudo: playerNickname, score: score, date: Date.now() });
+        console.log("Score mis à jour !");
+      } else if (playerNickname !== oldData.pseudo) {
+        ref.update({ pseudo: playerNickname });
+        console.log("Pseudo mis à jour !");
+      }
+    }).catch(err => console.error("Erreur saveScore:", err));
+  }
 
   function createPlatformsForLevel(level){
     platformsArray.forEach(p=>p.destroy());
@@ -238,4 +242,3 @@ function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex)
 </script>
 </body>
 </html>
-
