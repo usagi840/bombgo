@@ -63,6 +63,9 @@
   var joinStage = 'p1assign';
   var player1Pad = null, player2Pad = null;
   var player1Jump = null, player2Jump = null;
+  var player1AxisIndex = null, player1AxisInvert = false;
+  var player2AxisIndex = null, player2AxisInvert = false;
+  var axisBaseline = null;
   var prevButtons = {};
 
   // ==== Layout des niveaux ====
@@ -164,31 +167,50 @@
       let connectedIndexes = [];
       allPads.forEach((p,i)=>{ if(p) connectedIndexes.push(i); });
 
-      let debug = 'P1Pad idx:'+player1Pad+' P2Pad idx:'+player2Pad+' | Connectees:'+connectedIndexes.join(',')+'\n';
-      if(pad1){
-        let axesStr = pad1.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
-        let btnsStr = pad1.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
-        debug += 'P1 axes['+axesStr+'] btns['+btnsStr+']\n';
-      } else {
-        debug += 'P1: pad absent\n';
-      }
-      if(pad2){
-        let axesStr = pad2.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
-        let btnsStr = pad2.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
-        debug += 'P2 axes['+axesStr+'] btns['+btnsStr+']';
-      } else {
-        debug += 'P2: pad absent';
-      }
+      let debug = 'P1Pad idx:'+player1Pad+' (axis '+player1AxisIndex+') P2Pad idx:'+player2Pad+' (axis '+player2AxisIndex+') | Connectees:'+connectedIndexes.join(',');
       debugText.setText(debug);
 
-      movePlayer(player1, pad1, 'left1', 'turn1', 'right1', player1Jump, false);
-      movePlayer(player2, pad2, 'left2', 'turn2', 'right2', player2Jump, true);
+      movePlayer(player1, pad1, 'left1', 'turn1', 'right1', player1Jump, player1AxisIndex, player1AxisInvert);
+      movePlayer(player2, pad2, 'left2', 'turn2', 'right2', player2Jump, player2AxisIndex, player2AxisInvert);
     } catch(err) {
       debugText.setText('ERREUR: ' + err.message);
     }
   }
 
   function handleJoinScreen(allPads){
+    // ==== Étapes de calibration du joystick (pas de bouton, on lit le mouvement) ====
+    if(joinStage === 'p1axis' || joinStage === 'p2axis'){
+      const targetPad = (joinStage === 'p1axis') ? allPads[player1Pad] : allPads[player2Pad];
+      if(targetPad){
+        if(!axisBaseline){
+          axisBaseline = targetPad.axes.map(a => a.value);
+        } else {
+          let bestIndex = -1, bestDelta = 0;
+          targetPad.axes.forEach((a,i) => {
+            const delta = a.value - axisBaseline[i];
+            if(Math.abs(delta) > Math.abs(bestDelta)){ bestDelta = delta; bestIndex = i; }
+          });
+          if(bestIndex !== -1 && Math.abs(bestDelta) > 0.5){
+            const invert = bestDelta < 0;
+            if(joinStage === 'p1axis'){
+              player1AxisIndex = bestIndex; player1AxisInvert = invert;
+              joinStage = 'p2assign';
+            } else {
+              player2AxisIndex = bestIndex; player2AxisInvert = invert;
+              joinStage = 'done';
+              joinScreen = false;
+            }
+            axisBaseline = null;
+          }
+        }
+      }
+      updateJoinText();
+      return;
+    }
+
+    // ==== Étapes basées sur les boutons (rejoindre / choisir le saut) ====
+    let handledThisFrame = false;
+
     allPads.forEach((pad, index) => {
       if(!pad) return;
 
@@ -197,47 +219,54 @@
         const wasPressed = prevButtons[key] || false;
         const justPressed = b.pressed && !wasPressed;
         prevButtons[key] = b.pressed;
-        if(!justPressed) return;
+
+        if(handledThisFrame || !justPressed) return;
 
         if(joinStage === 'p1assign' && index !== player2Pad){
           player1Pad = index;
           joinStage = 'p1jump';
+          handledThisFrame = true;
         } else if(joinStage === 'p1jump' && index === player1Pad){
           player1Jump = btnIndex;
-          joinStage = 'p2assign';
+          joinStage = 'p1axis';
+          handledThisFrame = true;
         } else if(joinStage === 'p2assign' && index !== player1Pad){
           player2Pad = index;
           joinStage = 'p2jump';
+          handledThisFrame = true;
         } else if(joinStage === 'p2jump' && index === player2Pad){
           player2Jump = btnIndex;
-          joinStage = 'done';
-          joinScreen = false;
+          joinStage = 'p2axis';
+          handledThisFrame = true;
         }
       });
     });
 
-    const messages = {
-      p1assign: 'Joueur 1 : appuie sur un bouton pour rejoindre',
-      p1jump: 'Joueur 1 : maintenant appuie sur TON bouton de saut',
-      p2assign: 'Joueur 2 : appuie sur un bouton pour rejoindre',
-      p2jump: 'Joueur 2 : maintenant appuie sur TON bouton de saut'
-    };
-    joinText.setText(messages[joinStage] || '');
-    if(joinStage === 'done') joinText.setText('');
+    updateJoinText();
   }
 
-  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex, invert){
+  function updateJoinText(){
+    const messages = {
+      p1assign: 'Joueur 1 : appuie sur un bouton pour rejoindre',
+      p1jump: 'Joueur 1 : appuie sur TON bouton de saut',
+      p1axis: 'Joueur 1 : penche le joystick vers la droite',
+      p2assign: 'Joueur 2 : appuie sur un bouton pour rejoindre',
+      p2jump: 'Joueur 2 : appuie sur TON bouton de saut',
+      p2axis: 'Joueur 2 : penche le joystick vers la droite'
+    };
+    joinText.setText(messages[joinStage] || '');
+  }
+
+  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex, axisIndex, invertAxis){
     if(!pad) return;
 
     const deadzone = 0.2;
     let moveX = 0;
-    let maxAbs = 0;
-    pad.axes.forEach(a => {
-      const v = a.value;
-      if(Math.abs(v) > maxAbs){ maxAbs = Math.abs(v); moveX = v; }
-    });
-    if(maxAbs <= deadzone) moveX = 0;
-    if(invert) moveX = -moveX;
+    if(axisIndex !== null && pad.axes[axisIndex]){
+      moveX = pad.axes[axisIndex].value;
+      if(invertAxis) moveX = -moveX;
+      if(Math.abs(moveX) <= deadzone) moveX = 0;
+    }
 
     if(moveX < 0){
       player.setVelocityX(-160);
