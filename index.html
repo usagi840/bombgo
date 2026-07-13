@@ -62,6 +62,17 @@
   var JUMP_BUTTON = { player1: 12, player2: 2 };
   var axisBaseline = {}; // par index de manette, valeurs de repos de chaque axe
 
+  // ==== Réglages manuels si un joueur ne bouge pas ou va dans le mauvais sens ====
+  // invertX: passe à true si ce joueur part dans le mauvais sens.
+  // forcedAxis: laisse à null pour une détection automatique. Si un joueur ne
+  // bouge pas du tout, regarde le texte de debug en bas de l'écran (ex:
+  // "Pad0 axes[0:0.00 1:0.00 2:-1.00 3:0.30]"), pousse le stick à gauche/droite
+  // et repère quel numéro d'axe change. Mets ce numéro ici (ex: 3).
+  var CONTROLS = {
+    player1: { invertX: false, forcedAxis: null },
+    player2: { invertX: false, forcedAxis: null }
+  };
+
   var joinScreen = true;
   var joinStage = 'p1assign';
   var player1Pad = null, player2Pad = null;
@@ -173,8 +184,8 @@
       const pad1 = allPads[player1Pad];
       const pad2 = allPads[player2Pad];
 
-      movePlayer(player1, pad1, player1Pad, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1);
-      movePlayer(player2, pad2, player2Pad, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2);
+      movePlayer(player1, pad1, player1Pad, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1, CONTROLS.player1);
+      movePlayer(player2, pad2, player2Pad, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2, CONTROLS.player2);
     } catch(err) {
       debugText.setText('ERREUR: ' + err.message);
     }
@@ -215,7 +226,7 @@
     if(joinStage === 'done') joinText.setText('');
   }
 
-  function movePlayer(player, pad, padIndex, leftAnim, turnAnim, rightAnim, jumpButtonIndex){
+  function movePlayer(player, pad, padIndex, leftAnim, turnAnim, rightAnim, jumpButtonIndex, controlConfig){
     if(!pad) return;
 
     // Première fois qu'on voit cette manette : on capture tout de suite la
@@ -229,24 +240,30 @@
     const recalSpeed = 0.02;     // vitesse de recalage doux du repère
 
     let moveX = 0;
-    let maxAbsDelta = 0;
-    pad.axes.forEach((a, i) => {
-      const delta = a.value - axisBaseline[padIndex][i];
 
-      // Recalage lent : si l'axe est quasi immobile, on rapproche doucement
-      // le repère de sa valeur actuelle. Ça absorbe une dérive progressive du
-      // stick (ex: joueur 2) sans jamais confondre ça avec un vrai mouvement.
+    if(controlConfig.forcedAxis !== null && pad.axes[controlConfig.forcedAxis]){
+      // Axe imposé manuellement (voir CONTROLS en haut du fichier)
+      const i = controlConfig.forcedAxis;
+      const a = pad.axes[i];
+      const delta = a.value - axisBaseline[padIndex][i];
       if(Math.abs(delta) < stillThreshold){
         axisBaseline[padIndex][i] += (a.value - axisBaseline[padIndex][i]) * recalSpeed;
       }
+      moveX = Math.abs(delta) > deadzone ? delta : 0;
+    } else {
+      // Détection automatique : on prend l'axe qui a le plus bougé depuis son repère
+      let maxAbsDelta = 0;
+      pad.axes.forEach((a, i) => {
+        const delta = a.value - axisBaseline[padIndex][i];
+        if(Math.abs(delta) < stillThreshold){
+          axisBaseline[padIndex][i] += (a.value - axisBaseline[padIndex][i]) * recalSpeed;
+        }
+        if(Math.abs(delta) > maxAbsDelta){ maxAbsDelta = Math.abs(delta); moveX = delta; }
+      });
+      if(maxAbsDelta <= deadzone) moveX = 0;
+    }
 
-      if(Math.abs(delta) > maxAbsDelta){ maxAbsDelta = Math.abs(delta); moveX = delta; }
-    });
-    if(maxAbsDelta <= deadzone) moveX = 0;
-
-    // Inversion : avec le mapping de ces manettes, pousser à droite donne une
-    // valeur négative (et à gauche une valeur positive), d'où le sens inversé.
-    moveX = -moveX;
+    if(controlConfig.invertX) moveX = -moveX;
 
     if(moveX < 0){
       player.setVelocityX(-160);
