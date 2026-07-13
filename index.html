@@ -58,18 +58,15 @@
   var platformsArray = [];
   var tremplin = null;
 
-  var JUMP_BUTTONS = [19, 21]; // les deux boutons SR (un par Joy-Con) déclenchent le saut, peu importe le joueur
-
-  // ==== Configuration des sticks ====
-  // Tes 2 Joy-Con sont vues par le navigateur comme UNE SEULE manette
-  // combinée : le stick de la Joy-Con gauche = axes 0/1, le stick de la
-  // Joy-Con droite = axes 2/3. Joueur 1 = Joy-Con gauche, joueur 2 = Joy-Con
-  // droite.
+  // ==== Configuration des manettes ====
+  // Tes 2 Joy-Con sont vues par le navigateur comme DEUX manettes séparées.
+  // Joueur 1 = 1ère manette détectée (bouton SR = 19 pour sauter).
+  // Joueur 2 = 2ème manette détectée (bouton SR = 21 pour sauter).
   // invertX: passe à true si ce joueur part dans le mauvais sens quand tu
   //          pousses le stick.
   var CONTROLS = {
-    player1: { axisX: 0, invertX: false },
-    player2: { axisX: 2, invertX: false }
+    player1: { axisX: 0, invertX: false, jumpButton: 19 },
+    player2: { axisX: 0, invertX: false, jumpButton: 21 }
   };
 
   var joinScreen = true;
@@ -172,38 +169,31 @@
       debugText.setText(debug);
       // ==== FIN DEBUG ====
 
-      const { pad1, axis1, pad2, axis2 } = getControllerPads(allPads);
+      const { pad1, pad2 } = getControllerPads(allPads);
 
       if(joinScreen){
         handleStartScreen(pad1 || pad2);
         return;
       }
 
-      movePlayer(player1, pad1, axis1, 'left1', 'turn1', 'right1', JUMP_BUTTONS, CONTROLS.player1);
-      movePlayer(player2, pad2, axis2, 'left2', 'turn2', 'right2', JUMP_BUTTONS, CONTROLS.player2);
+      movePlayer(player1, pad1, CONTROLS.player1);
+      movePlayer(player2, pad2, CONTROLS.player2);
     } catch(err) {
       debugText.setText('ERREUR: ' + err.message);
     }
   }
 
-  // Détermine quelle(s) manette(s)/axe utiliser pour chaque joueur.
-  // - Si 2 manettes physiques distinctes sont connectées : chaque joueur a
-  //   la sienne, sur son axe 0 (gauche/droite du stick).
-  // - Si une seule manette est connectée (cas des 2 Joy-Con combinées en une
-  //   seule manette) : les deux joueurs partagent cette manette, joueur 1
-  //   utilise le stick gauche (axe 0), joueur 2 le stick droit (axe 2).
+  // Détermine quelle manette physique utiliser pour chaque joueur.
+  // 2 Joy-Con connectées séparément = 2 manettes distinctes dans le
+  // navigateur. Joueur 1 = 1ère manette détectée, Joueur 2 = 2ème.
   function getControllerPads(allPads){
     const connected = allPads.filter(p => p);
-    if(connected.length >= 2){
-      return { pad1: connected[0], axis1: 0, pad2: connected[1], axis2: 0 };
-    }
-    const pad = connected[0] || null;
-    return { pad1: pad, axis1: CONTROLS.player1.axisX, pad2: pad, axis2: CONTROLS.player2.axisX };
+    return { pad1: connected[0] || null, pad2: connected[1] || null };
   }
 
   function handleStartScreen(pad){
     if(!pad){
-      joinText.setText('Connecte ta/tes manette(s) (Joy-Con)');
+      joinText.setText('Connecte les 2 manettes (Joy-Con)');
       return;
     }
     const anyPressed = pad.buttons.some(b => b.pressed);
@@ -211,15 +201,20 @@
       joinScreen = false;
       joinText.setText('');
     } else {
-      joinText.setText('Appuie sur un bouton pour commencer\n(stick gauche = Joueur 1, stick droit = Joueur 2)');
+      joinText.setText('Appuie sur un bouton pour commencer\n(manette 1 = Joueur 1, manette 2 = Joueur 2)');
     }
   }
 
-  function movePlayer(player, pad, axisX, leftAnim, turnAnim, rightAnim, jumpButtonIndices, controlConfig){
+  function movePlayer(player, pad, controlConfig){
     if(!pad) return;
 
+    const isPlayer1 = (player === player1);
+    const leftAnim = isPlayer1 ? 'left1' : 'left2';
+    const turnAnim = isPlayer1 ? 'turn1' : 'turn2';
+    const rightAnim = isPlayer1 ? 'right1' : 'right2';
+
     const deadzone = 0.25;
-    let moveX = pad.axes[axisX] ? pad.axes[axisX].value : 0;
+    let moveX = pad.axes[controlConfig.axisX] ? pad.axes[controlConfig.axisX].value : 0;
     if(controlConfig.invertX) moveX = -moveX;
     if(Math.abs(moveX) < deadzone) moveX = 0;
 
@@ -234,7 +229,8 @@
       player.anims.play(turnAnim);
     }
 
-    const jumpPressed = jumpButtonIndices.some(i => pad.buttons[i] && pad.buttons[i].pressed);
+    const jumpBtn = pad.buttons[controlConfig.jumpButton];
+    const jumpPressed = jumpBtn && jumpBtn.pressed;
     if(jumpPressed && player.body.touching.down){
       player.setVelocityY(-330);
     }
