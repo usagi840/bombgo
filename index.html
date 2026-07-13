@@ -1,3 +1,4 @@
+// Don't change this
 <!doctype html>
 <html lang="fr">
 <head>
@@ -166,10 +167,14 @@
         let btnsStr = pad.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
         debug += 'Pad'+index+' axes['+axesStr+'] btns['+btnsStr+']\n';
       });
+      const { pad1, pad2 } = getControllerPads(allPads);
+
+      debug += 'Joueur1 -> Pad' + (pad1 ? allPads.indexOf(pad1) : 'aucune') +
+               (pad1 ? ' | bouton'+CONTROLS.player1.jumpButton+'='+(pad1.buttons[CONTROLS.player1.jumpButton] ? pad1.buttons[CONTROLS.player1.jumpButton].pressed : 'absent') : '') + '\n';
+      debug += 'Joueur2 -> Pad' + (pad2 ? allPads.indexOf(pad2) : 'aucune') +
+               (pad2 ? ' | bouton'+CONTROLS.player2.jumpButton+'='+(pad2.buttons[CONTROLS.player2.jumpButton] ? pad2.buttons[CONTROLS.player2.jumpButton].pressed : 'absent') : '') + '\n';
       debugText.setText(debug);
       // ==== FIN DEBUG ====
-
-      const { pad1, pad2 } = getControllerPads(allPads);
 
       if(joinScreen){
         handleStartScreen(pad1 || pad2);
@@ -214,7 +219,12 @@
     const rightAnim = isPlayer1 ? 'right1' : 'right2';
 
     const deadzone = 0.25;
-    let moveX = pad.axes[controlConfig.axisX] ? pad.axes[controlConfig.axisX].value : 0;
+    // Un Joy-Con utilisé seul est tenu à 90°, donc le stick ne bouge pas
+    // forcément sur l'axe 0 : on regarde les 2 premiers axes et on prend
+    // celui qui bouge vraiment (le plus grand en valeur absolue).
+    const axisA = pad.axes[0] ? pad.axes[0].value : 0;
+    const axisB = pad.axes[1] ? pad.axes[1].value : 0;
+    let moveX = Math.abs(axisA) >= Math.abs(axisB) ? axisA : axisB;
     if(controlConfig.invertX) moveX = -moveX;
     if(Math.abs(moveX) < deadzone) moveX = 0;
 
