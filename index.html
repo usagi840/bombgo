@@ -59,6 +59,9 @@
   var platformsArray = [];
   var tremplin = null;
 
+  // ==== Configuration fixe des manettes (à ajuster ici directement) ====
+  var JUMP_BUTTON = { player1: 12, player2: 2 };
+
   var joinScreen = true;
   var joinStage = 'p1assign';
   var player1Pad = null, player2Pad = null;
@@ -235,18 +238,12 @@
 
         if(joinStage === 'p1assign' && index !== player2Pad){
           player1Pad = index;
-          joinStage = 'p1jump';
-          handledThisFrame = true;
-        } else if(joinStage === 'p1jump' && index === player1Pad){
-          player1Jump = btnIndex;
+          player1Jump = JUMP_BUTTON.player1;
           joinStage = 'p1axis';
           handledThisFrame = true;
         } else if(joinStage === 'p2assign' && index !== player1Pad){
           player2Pad = index;
-          joinStage = 'p2jump';
-          handledThisFrame = true;
-        } else if(joinStage === 'p2jump' && index === player2Pad){
-          player2Jump = btnIndex;
+          player2Jump = JUMP_BUTTON.player2;
           joinStage = 'p2axis';
           handledThisFrame = true;
         }
@@ -259,10 +256,8 @@
   function updateJoinText(){
     const messages = {
       p1assign: 'Joueur 1 : appuie sur un bouton pour rejoindre',
-      p1jump: 'Joueur 1 : appuie sur TON bouton de saut',
       p1axis: 'Joueur 1 : penche le joystick vers la droite',
       p2assign: 'Joueur 2 : appuie sur un bouton pour rejoindre',
-      p2jump: 'Joueur 2 : appuie sur TON bouton de saut',
       p2axis: 'Joueur 2 : penche le joystick vers la droite'
     };
     joinText.setText(messages[joinStage] || '');
