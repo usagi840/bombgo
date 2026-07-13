@@ -1,35 +1,79 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Menu</title>
-  <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
+<meta charset="UTF-8">
+<title>Sky uniquement</title>
 
-  <!-- Phaser -->
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
 
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-  <style>
-    body {
-      margin: 0;
-      background-color: #413d3d;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+<style>
+    body{
+        margin:0;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        height:100vh;
+        background:#222;
     }
-    canvas { border: 4px solid #291515; }
-  </style>
+</style>
 </head>
 <body>
 
-  <div id="game-wrapper"></div>
-
 <script>
+const config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    scene: {
+        preload: preload,
+        create: create
+    }
+};
+
+new Phaser.Game(config);
+
+function preload() {
+    this.load.image('sky', 'assets/sky.png');
+
+    this.load.image('piece1', 'assets/piece1.png');
+    this.load.image('piece2', 'assets/piece2.png');
+    this.load.image('piece3', 'assets/piece3.png');
+}
+
+function create() {
+    // Fond
+    this.add.image(400, 300, 'sky');
+
+    const startX = 70;     // Position à gauche
+    const startY = 120;    // Première case
+    const size = 70;       // Taille des carrés
+    const gap = 20;        // Espace entre les carrés
+
+    const pieces = ['piece1', 'piece2', 'piece3'];
+
+    for (let i = 0; i < 3; i++) {
+        const y = startY + i * (size + gap);
+
+        // Carré blanc avec contour noir
+        const g = this.add.graphics();
+        g.fillStyle(0xffffff, 1);
+        g.lineStyle(3, 0x000000, 1);
+        g.fillRect(startX, y, size, size);
+        g.strokeRect(startX, y, size, size);
+
+        // Image au centre du carré
+        this.add.image(
+            startX + size / 2,
+            y + size / 2,
+            pieces[i]
+        ).setDisplaySize(45, 45);
+    }
+}
 
 </script>
+
 </body>
 </html>
