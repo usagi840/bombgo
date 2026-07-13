@@ -178,6 +178,17 @@
   }
 
   function handleJoinScreen(allPads){
+    // ==== DEBUG PERMANENT : état brut de toutes les manettes connectées ====
+    let debugLobby = 'Stage: ' + joinStage + '\n';
+    allPads.forEach((pad, index) => {
+      if(!pad) return;
+      let axesStr = pad.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
+      let btnsStr = pad.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
+      debugLobby += 'Pad'+index+' axes['+axesStr+'] btns['+btnsStr+']\n';
+    });
+    debugText.setText(debugLobby);
+    // ==== FIN DEBUG ====
+
     // ==== Étapes de calibration du joystick (pas de bouton, on lit le mouvement) ====
     if(joinStage === 'p1axis' || joinStage === 'p2axis'){
       const targetPad = (joinStage === 'p1axis') ? allPads[player1Pad] : allPads[player2Pad];
