@@ -59,15 +59,31 @@
   var tremplin = null;
 
   // ==== Configuration fixe des manettes (à ajuster ici directement) ====
-  var JUMP_BUTTON = { player1: 12, player2: 2 };
+  //
+  // COMMENT TROUVER LE NUMÉRO DU BOUTON SR :
+  // 1) Lance le jeu, regarde le texte de debug tout en bas de l'écran.
+  // 2) Appuie UNIQUEMENT sur le bouton SR de la Joy-Con du joueur concerné.
+  // 3) Dans la ligne "PadX ... btns[...]", repère le numéro qui passe à "ON"
+  //    (ex: "btns[5:ON]" veut dire que SR = bouton 5 sur cette manette).
+  // 4) Remplace la valeur correspondante ci-dessous (player1 / player2).
+  //    Le numéro peut être différent entre la Joy-Con gauche et la Joy-Con
+  //    droite, et peut varier selon l'ordinateur/le navigateur : il faut donc
+  //    vérifier une fois pour chaque manette utilisée.
+  var JUMP_BUTTON = { player1: 5, player2: 5 };
   var axisBaseline = {}; // par index de manette, valeurs de repos de chaque axe
 
-  // ==== Réglages manuels si un joueur ne bouge pas ou va dans le mauvais sens ====
-  // invertX: passe à true si ce joueur part dans le mauvais sens.
-  // forcedAxis: laisse à null pour une détection automatique. Si un joueur ne
-  // bouge pas du tout, regarde le texte de debug en bas de l'écran (ex:
-  // "Pad0 axes[0:0.00 1:0.00 2:-1.00 3:0.30]"), pousse le stick à gauche/droite
-  // et repère quel numéro d'axe change. Mets ce numéro ici (ex: 3).
+  // ==== Réglages manuels du joystick (stick analogique de la Joy-Con) ====
+  // Le déplacement gauche/droite utilise UNIQUEMENT le stick (plus le
+  // fallback croix directionnelle boutons 14/15, gardé par sécurité).
+  //
+  // invertX: passe à true si ce joueur part dans le mauvais sens quand tu
+  //          pousses le stick.
+  // forcedAxis: laisse à null pour une détection automatique (le jeu prend
+  //          l'axe qui bouge le plus). Si un joueur ne bouge pas du tout,
+  //          regarde le texte de debug en bas de l'écran (ex: "Pad0
+  //          axes[0:0.00 1:0.00 2:-1.00 3:0.30]"), pousse le stick à
+  //          gauche/droite et repère quel numéro d'axe change. Mets ce
+  //          numéro ici (ex: 0).
   var CONTROLS = {
     player1: { invertX: false, forcedAxis: null },
     player2: { invertX: false, forcedAxis: null }
@@ -284,9 +300,9 @@
       player.anims.play(turnAnim);
     }
 
-    let anyButtonPressed = false;
-    pad.buttons.forEach(b => { if(b.pressed) anyButtonPressed = true; });
-    if(anyButtonPressed && player.body.touching.down){
+    const jumpBtn = pad.buttons[jumpButtonIndex];
+    const jumpPressed = jumpBtn && jumpBtn.pressed;
+    if(jumpPressed && player.body.touching.down){
       player.setVelocityY(-330);
     }
   }
