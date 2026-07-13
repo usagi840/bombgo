@@ -124,10 +124,19 @@ function movePlayer(player, pad, padIndex, jumpButtonIndex){
     player.setVelocityX(0);
   }
 
-  // ✅ SAUT CORRIGÉ
-  const jumpPressed = pad.buttons[jumpButtonIndex] && pad.buttons[jumpButtonIndex].pressed;
+  // ✅ SAUT ROBUSTE (corrigé)
+  let jumpPressed = false;
 
-  if(jumpPressed && player.body.touching.down){
+  pad.buttons.forEach((b, i) => {
+    if (b.pressed || b.value > 0.5) {
+      // boutons principaux + bouton configuré
+      if (i === jumpButtonIndex || i === 0 || i === 1 || i === 2 || i === 3) {
+        jumpPressed = true;
+      }
+    }
+  });
+
+  if (jumpPressed && player.body.touching.down) {
     player.setVelocityY(-330);
   }
 }
