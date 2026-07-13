@@ -246,9 +246,12 @@
       player.anims.play(turnAnim);
     }
 
-    const jumpPressed = pad.buttons[jumpButtonIndex] && pad.buttons[jumpButtonIndex].pressed;
-
-    if(jumpPressed && player.body.touching.down){
+    let anyButtonPressed = false;
+    pad.buttons.forEach(b => { if(b.pressed) anyButtonPressed = true; });
+    if(anyButtonPressed && player.body.touching.down){
+      player.setVelocityY(-330);
+    }
+  }
 
   function collectStar(player, star){
     star.disableBody(true,true);
