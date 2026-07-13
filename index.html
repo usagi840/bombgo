@@ -1,4 +1,3 @@
-// Don't change this
 <!doctype html>
 <html lang="fr">
 <head>
@@ -189,8 +188,11 @@
   }
 
   // Détermine quelle manette physique utiliser pour chaque joueur.
-  // 2 Joy-Con connectées séparément = 2 manettes distinctes dans le
-  // navigateur. Joueur 1 = 1ère manette détectée, Joueur 2 = 2ème.
+  // Chaque joueur a sa propre manette : joueur 1 = 1ère manette détectée,
+  // joueur 2 = 2ème manette détectée. Si une seule manette est vue par le
+  // navigateur, le joueur 2 n'aura pas de pad tant que la 2ème n'est pas
+  // détectée séparément (voir panneau debug : il doit y avoir 2 lignes
+  // "PadX").
   function getControllerPads(allPads){
     const connected = allPads.filter(p => p);
     return { pad1: connected[0] || null, pad2: connected[1] || null };
@@ -219,9 +221,8 @@
     const rightAnim = isPlayer1 ? 'right1' : 'right2';
 
     const deadzone = 0.25;
-    // Un Joy-Con utilisé seul est tenu à 90°, donc le stick ne bouge pas
-    // forcément sur l'axe 0 : on regarde les 2 premiers axes et on prend
-    // celui qui bouge vraiment (le plus grand en valeur absolue).
+    // Le stick peut bouger sur l'axe 0 ou 1 selon l'orientation du Joy-Con :
+    // on prend celui des deux qui bouge vraiment.
     const axisA = pad.axes[0] ? pad.axes[0].value : 0;
     const axisB = pad.axes[1] ? pad.axes[1].value : 0;
     let moveX = Math.abs(axisA) >= Math.abs(axisB) ? axisA : axisB;
