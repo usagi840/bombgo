@@ -235,7 +235,10 @@
     const deadzone = 0.2;
     let moveX = 0;
     let maxAbsDelta = 0;
-    pad.axes.forEach((a, i) => {
+    // On ne regarde que les 2 premiers axes (normalement le stick principal
+    // X/Y). Les axes suivants (gâchettes, capteurs annexes...) peuvent bouger
+    // légèrement dès qu'on touche la manette et faussaient la détection.
+    pad.axes.slice(0, 2).forEach((a, i) => {
       const delta = a.value - axisBaseline[padIndex][i];
       if(Math.abs(delta) > maxAbsDelta){ maxAbsDelta = Math.abs(delta); moveX = delta; }
     });
