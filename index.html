@@ -75,6 +75,7 @@
   };
 
   var pad1 = null, pad2 = null;
+  var statusText = null, debugText = null, dKey = null, debugOn = false;
 
   // ==== Variables globales ====
   var player1, player2, stars, bombs, platforms;
@@ -172,6 +173,15 @@
       if (pad1 === pad) pad1 = null;
       if (pad2 === pad) pad2 = null;
     });
+
+    // --- Diagnostic ---
+    // Ligne toujours visible : statut de connexion des 2 manettes.
+    statusText = this.add.text(400, 590, '', { fontSize: '13px', fill: '#ffcc66' }).setOrigin(0.5, 1);
+
+    // Overlay complet (axes/boutons en direct) : touche D pour afficher/masquer.
+    debugText = this.add.text(16, 420, '', { fontSize: '13px', fill: '#00ff00', backgroundColor: '#000000aa' });
+    debugText.setVisible(false);
+    dKey = this.input.keyboard.addKey('D');
   }
 
   // -----------------------------------------------------------------
@@ -189,10 +199,50 @@
   }
 
   function update(){
+    // Filet de sécurité : retente l'assignation à chaque frame au cas où
+    // l'événement 'connected' aurait été raté (ex: manette déjà active
+    // avant le chargement de la page).
+    assignPads(this.input.gamepad.gamepads);
+
+    updateDiagnostic.call(this);
+
     if(gameOver) return;
 
     movePlayer(player1, pad1, PLAYER_CONFIGS.p1, {left:'left1', turn:'turn1', right:'right1'});
     movePlayer(player2, pad2, PLAYER_CONFIGS.p2, {left:'left2', turn:'turn2', right:'right2'});
+  }
+
+  function updateDiagnostic(){
+    // Ligne toujours visible
+    const s1 = pad1 ? `#${pad1.index} OK (${pad1.axes.length} axes, ${pad1.buttons.length} boutons)` : 'NON connectée';
+    const s2 = pad2 ? `#${pad2.index} OK (${pad2.axes.length} axes, ${pad2.buttons.length} boutons)` : 'NON connectée';
+    statusText.setText(`Manette 1 (bleu): ${s1}   |   Manette 2 (rouge): ${s2}   [D = debug détaillé]`);
+
+    if (Phaser.Input.Keyboard.JustDown(dKey)) {
+      debugOn = !debugOn;
+      debugText.setVisible(debugOn);
+    }
+    if (debugOn) {
+      debugText.setText(buildDebugInfo());
+    }
+  }
+
+  function buildDebugInfo(){
+    const lines = [];
+    [['P1', pad1, PLAYER_CONFIGS.p1], ['P2', pad2, PLAYER_CONFIGS.p2]].forEach(([label, pad, cfg]) => {
+      if (!pad) { lines.push(`${label}: aucune manette assignée`); return; }
+      const axesStr = pad.axes.map((a, i) => `ax${i}=${a.getValue().toFixed(2)}`).join(' ');
+      const pressed = [];
+      pad.buttons.forEach((b, i) => { if (b.pressed) pressed.push(i); });
+      const axisOk = cfg.axis < pad.axes.length ? 'OK' : `HORS LIMITE (max ${pad.axes.length - 1})`;
+      const jumpOk = cfg.jump < pad.buttons.length ? 'OK' : `HORS LIMITE (max ${pad.buttons.length - 1})`;
+      lines.push(`${label} (${pad.id.slice(0,30)})`);
+      lines.push(`  config: axe=${cfg.axis} [${axisOk}]  boutonSaut=${cfg.jump} [${jumpOk}]`);
+      lines.push(`  axes live: ${axesStr}`);
+      lines.push(`  boutons appuyés: [${pressed.join(',')}]`);
+    });
+    lines.push('(D pour cacher)');
+    return lines.join('\n');
   }
 
   // -----------------------------------------------------------------
