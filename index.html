@@ -61,6 +61,7 @@
 
   // ==== Configuration fixe des manettes (à ajuster ici directement) ====
   var JUMP_BUTTON = { player1: 12, player2: 2 };
+  var axisBaseline = {}; // par index de manette, valeurs de repos de chaque axe
 
   var joinScreen = true;
   var joinStage = 'p1assign';
@@ -219,19 +220,25 @@
   function movePlayer(player, pad, padIndex, leftAnim, turnAnim, rightAnim, jumpButtonIndex){
     if(!pad) return;
 
+    // Première fois qu'on voit cette manette : on mémorise la valeur "au repos"
+    // de chaque axe (une gâchette non touchée peut valoir -1 au repos, ce n'est
+    // pas forcément 0). On comparera ensuite les valeurs à ce repère plutôt
+    // qu'à zéro, pour ne détecter qu'un vrai mouvement du joueur.
+    if(!axisBaseline[padIndex]){
+      axisBaseline[padIndex] = pad.axes.map(a => a.value);
+    }
+
     const deadzone = 0.2;
+    let moveX = 0;
+    let maxAbsDelta = 0;
+    pad.axes.forEach((a, i) => {
+      const delta = a.value - axisBaseline[padIndex][i];
+      if(Math.abs(delta) > maxAbsDelta){ maxAbsDelta = Math.abs(delta); moveX = delta; }
+    });
+    if(maxAbsDelta <= deadzone) moveX = 0;
 
-    // On utilise uniquement l'axe 0 (horizontal du stick gauche).
-    // Avant, le code cherchait l'axe avec la plus grande valeur absolue parmi
-    // tous les axes non exclus : si une gâchette (axe qui se déclenche plus tard,
-    // ex: LT/RT) n'était pas repérée au premier passage, sa valeur au repos
-    // (souvent -1) était prise pour un mouvement, ce qui faisait avancer le
-    // personnage tout seul. En se limitant à l'axe 0, on évite ce problème.
-    let moveX = pad.axes[0] ? pad.axes[0].value : 0;
-    if(Math.abs(moveX) <= deadzone) moveX = 0;
-
-    // Inversion : la manette renvoie une valeur négative quand on pousse à
-    // droite (et positive à gauche) avec ce mapping, d'où le sens inversé.
+    // Inversion : avec le mapping de ces manettes, pousser à droite donne une
+    // valeur négative (et à gauche une valeur positive), d'où le sens inversé.
     moveX = -moveX;
 
     if(moveX < 0){
