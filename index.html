@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>2 Joueurs</title>
+  <title>Solo</title>
   <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
 
   <!-- Phaser -->
@@ -32,10 +32,6 @@
 </head>
 <body>
 
-  <img src="assets/logohome.png" class="icon home" onclick="window.location.href='./index.html'">
-  <img src="assets/logoretour.png" class="icon retour" onclick="window.location.href='./index.html'">
-  <img src="assets/logorefresh.png" class="icon refresh" onclick="window.location.href='./2joueurs.html'">
-
   <div id="game-wrapper"></div>
 
 <script>
@@ -54,36 +50,19 @@
 
   let playerNickname = localStorage.getItem("playerNickname") || "player";
 
-  // =================================================================
-  // CONFIGURATION MANETTES — figée en dur, pas de PC/clavier, pas
-  // d'outil de config externe. Manettes Switch (Joy-Con / Pro).
-  //
-  // Manette 1 (bleue) -> Joueur 1 (dude1) : axe 1, bouton 13
-  // Manette 2 (rouge) -> Joueur 2 (dude2) : axe 3, bouton 1,
-  //                       inversée à 180° (manette tenue à l'envers)
-  //
-  // L'assignation manette -> joueur se fait par ORDRE DE CONNEXION :
-  // la première manette qui envoie un input devient pad1 (joueur 1),
-  // la seconde devient pad2 (joueur 2). Cet ordre reste fixe une fois
-  // assigné, il ne change plus en cours de partie.
-  // =================================================================
-  const DEADZONE = 0.2;
-
-  const PLAYER_CONFIGS = {
-    p1: { axis: 1,  jump: 13, invert: false },
-    p2: { axis: 3,  jump: 1,  invert: true  }
-  };
-
-  var pad1 = null, pad2 = null;
-  var statusText = null, debugText = null, dKey = null, debugOn = false;
-
   // ==== Variables globales ====
-  var player1, player2, stars, bombs, platforms;
+  var player1, player2, cursors, stars, bombs, platforms, joinText, debugText;
   var score = 0, scoreText;
   var lives = 3, lifeIcons = [];
   var gameOver = false;
   var currentLevel = 0;
   var platformsArray = [];
+  var tremplin = null;
+
+  var joinScreen = true;
+  var player1Pad = null, player2Pad = null;
+  var player1Jump = null, player2Jump = null;
+  var prevButtons = {};
 
   // ==== Layout des niveaux ====
   var platformLayouts = [
@@ -113,19 +92,24 @@
   function preload(){
     this.load.image('sky','assets/sky.png');
     this.load.image('ground','assets/platform.png');
-    this.load.image('star','assets/piece.png');
+    this.load.image('star','assets/piece1.png');
     this.load.image('bomb','assets/bombe.png');
     this.load.image('vie','assets/vie1.png');
     this.load.image('novie','assets/vie2.png');
     this.load.image('tremplin','assets/tremplin.png');
-
-    this.load.spritesheet('dude1','assets/personnageframe1.png',{frameWidth:320, frameHeight:480});
-    this.load.spritesheet('dude2','assets/personnageframe2.png',{frameWidth:320, frameHeight:480});
+    this.load.spritesheet('dude1', 'assets/personnageframe1.png', {frameWidth:320, frameHeight:480});
+    this.load.spritesheet('dude2', 'assets/personnageframe2.png', {frameWidth:320, frameHeight:480});
   }
 
   function create(){
     this.add.image(400,300,'sky');
     scoreText = this.add.text(16,16,'Score: 0',{fontSize:'32px',fill:'#000'});
+
+    joinText = this.add.text(400, 300, 'Joueur 1 : appuie sur ton bouton de saut\nJoueur 2 : appuie sur ton bouton de saut', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
+    joinText.setDepth(1000);
+
+    debugText = this.add.text(16, 500, '', {fontSize:'16px', fill:'#fff', backgroundColor:'#000', padding:{x:8,y:4}});
+    debugText.setDepth(1000);
 
     for(let i=0;i<lives;i++) lifeIcons.push(this.add.image(40+i*45,70,'vie').setScale(0.02));
 
@@ -133,8 +117,8 @@
     platforms.create(400,568,'ground').setScale(2).refreshBody();
     createPlatformsForLevel(currentLevel);
 
-    player1 = this.physics.add.sprite(100,450,'dude1').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
-    player2 = this.physics.add.sprite(700,450,'dude2').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
+    player1 = this.physics.add.sprite(100, 450, 'dude1').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
+    player2 = this.physics.add.sprite(700, 450, 'dude2').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
 
     this.anims.create({key:'left1', frames:this.anims.generateFrameNumbers('dude1',{start:0,end:3}), frameRate:10, repeat:-1});
     this.anims.create({key:'turn1', frames:[{key:'dude1',frame:4}], frameRate:20});
@@ -143,6 +127,8 @@
     this.anims.create({key:'left2', frames:this.anims.generateFrameNumbers('dude2',{start:0,end:3}), frameRate:10, repeat:-1});
     this.anims.create({key:'turn2', frames:[{key:'dude2',frame:4}], frameRate:20});
     this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude2',{start:5,end:8}), frameRate:10, repeat:-1});
+
+    cursors = this.input.keyboard.createCursorKeys();
 
     stars = this.physics.add.group({key:'star', repeat:11, setXY:{x:12,y:0,stepX:70}});
     stars.children.iterate(c => { c.setBounceY(Phaser.Math.FloatBetween(0.4,0.8)); c.setScale(0.015); });
@@ -153,129 +139,103 @@
     this.physics.add.collider(player2, platforms);
     this.physics.add.collider(stars, platforms);
     this.physics.add.collider(bombs, platforms);
-
     this.physics.add.overlap(player1, stars, collectStar, null, this);
     this.physics.add.overlap(player2, stars, collectStar, null, this);
-
     this.physics.add.collider(player1, bombs, hitBomb, null, this);
     this.physics.add.collider(player2, bombs, hitBomb, null, this);
-
-    // --- Assignation des manettes (aucun clavier, pad uniquement) ---
-    assignPads(this.input.gamepad.gamepads);
-
-    this.input.gamepad.on('connected', (pad) => {
-      console.log('[manette] connectée :', pad.index, pad.id);
-      assignPads(this.input.gamepad.gamepads);
-    });
-
-    this.input.gamepad.on('disconnected', (pad) => {
-      console.log('[manette] déconnectée :', pad.index, pad.id);
-      if (pad1 === pad) pad1 = null;
-      if (pad2 === pad) pad2 = null;
-    });
-
-    // --- Diagnostic ---
-    // Ligne toujours visible : statut de connexion des 2 manettes.
-    statusText = this.add.text(400, 590, '', { fontSize: '13px', fill: '#ffcc66' }).setOrigin(0.5, 1);
-
-    // Overlay complet (axes/boutons en direct) : touche D pour afficher/masquer.
-    debugText = this.add.text(16, 420, '', { fontSize: '13px', fill: '#00ff00', backgroundColor: '#000000aa' });
-    debugText.setVisible(false);
-    dKey = this.input.keyboard.addKey('D');
-  }
-
-  // -----------------------------------------------------------------
-  // Assigne les manettes physiques à pad1/pad2 par ordre de connexion,
-  // une seule fois. Ne réassigne jamais une manette déjà attribuée.
-  // -----------------------------------------------------------------
-  function assignPads(gamepadList){
-    const pads = gamepadList.filter(p => p);
-    pads.forEach(pad => {
-      if (pad !== pad1 && pad !== pad2) {
-        if (!pad1) { pad1 = pad; console.log('[manette] pad1 (Joueur 1, bleu) =', pad.id); }
-        else if (!pad2) { pad2 = pad; console.log('[manette] pad2 (Joueur 2, rouge) =', pad.id); }
-      }
-    });
   }
 
   function update(){
-    // Filet de sécurité : retente l'assignation à chaque frame au cas où
-    // l'événement 'connected' aurait été raté (ex: manette déjà active
-    // avant le chargement de la page).
-    assignPads(this.input.gamepad.gamepads);
-
-    updateDiagnostic.call(this);
-
     if(gameOver) return;
 
-    movePlayer(player1, pad1, PLAYER_CONFIGS.p1, {left:'left1', turn:'turn1', right:'right1'});
-    movePlayer(player2, pad2, PLAYER_CONFIGS.p2, {left:'left2', turn:'turn2', right:'right2'});
+    try {
+      const gp = this.input.gamepad;
+      const allPads = gp ? gp.gamepads : [];
+
+      if(joinScreen){
+        handleJoinScreen.call(this, allPads);
+        return;
+      }
+
+      const pad1 = allPads[player1Pad];
+      const pad2 = allPads[player2Pad];
+
+      let connectedIndexes = [];
+      allPads.forEach((p,i)=>{ if(p) connectedIndexes.push(i); });
+
+      let debug = 'P1Pad idx:'+player1Pad+' P2Pad idx:'+player2Pad+' | Connectees:'+connectedIndexes.join(',')+'\n';
+      if(pad1){
+        let axesStr = pad1.axes.map((a,i)=>i+':'+a.toFixed(2)).join(' ');
+        let btnsStr = pad1.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
+        debug += 'P1 axes['+axesStr+'] btns['+btnsStr+']\n';
+      } else {
+        debug += 'P1: pad absent\n';
+      }
+      if(pad2){
+        let axesStr = pad2.axes.map((a,i)=>i+':'+a.toFixed(2)).join(' ');
+        let btnsStr = pad2.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
+        debug += 'P2 axes['+axesStr+'] btns['+btnsStr+']';
+      } else {
+        debug += 'P2: pad absent';
+      }
+      debugText.setText(debug);
+
+      movePlayer(player1, pad1, 'left1', 'turn1', 'right1', player1Jump);
+      movePlayer(player2, pad2, 'left2', 'turn2', 'right2', player2Jump);
+    } catch(err) {
+      debugText.setText('ERREUR: ' + err.message);
+    }
   }
 
-  function updateDiagnostic(){
-    // Ligne toujours visible
-    const s1 = pad1 ? `#${pad1.index} OK (${pad1.axes.length} axes, ${pad1.buttons.length} boutons)` : 'NON connectée';
-    const s2 = pad2 ? `#${pad2.index} OK (${pad2.axes.length} axes, ${pad2.buttons.length} boutons)` : 'NON connectée';
-    statusText.setText(`Manette 1 (bleu): ${s1}   |   Manette 2 (rouge): ${s2}   [D = debug détaillé]`);
+  function handleJoinScreen(allPads){
+    allPads.forEach((pad, index) => {
+      if(!pad) return;
+      if(index === player1Pad || index === player2Pad) return;
 
-    if (Phaser.Input.Keyboard.JustDown(dKey)) {
-      debugOn = !debugOn;
-      debugText.setVisible(debugOn);
-    }
-    if (debugOn) {
-      debugText.setText(buildDebugInfo());
-    }
-  }
-
-  function buildDebugInfo(){
-    const lines = [];
-    [['P1', pad1, PLAYER_CONFIGS.p1], ['P2', pad2, PLAYER_CONFIGS.p2]].forEach(([label, pad, cfg]) => {
-      if (!pad) { lines.push(`${label}: aucune manette assignée`); return; }
-      const axesStr = pad.axes.map((a, i) => `ax${i}=${a.getValue().toFixed(2)}`).join(' ');
-      const pressed = [];
-      pad.buttons.forEach((b, i) => { if (b.pressed) pressed.push(i); });
-      const axisOk = cfg.axis < pad.axes.length ? 'OK' : `HORS LIMITE (max ${pad.axes.length - 1})`;
-      const jumpOk = cfg.jump < pad.buttons.length ? 'OK' : `HORS LIMITE (max ${pad.buttons.length - 1})`;
-      lines.push(`${label} (${pad.id.slice(0,30)})`);
-      lines.push(`  config: axe=${cfg.axis} [${axisOk}]  boutonSaut=${cfg.jump} [${jumpOk}]`);
-      lines.push(`  axes live: ${axesStr}`);
-      lines.push(`  boutons appuyés: [${pressed.join(',')}]`);
+      pad.buttons.forEach((b, btnIndex) => {
+        const key = index + '_' + btnIndex;
+        const wasPressed = prevButtons[key] || false;
+        if(b.pressed && !wasPressed){
+          if(player1Pad === null){ player1Pad = index; player1Jump = btnIndex; }
+          else if(player2Pad === null){ player2Pad = index; player2Jump = btnIndex; }
+        }
+        prevButtons[key] = b.pressed;
+      });
     });
-    lines.push('(D pour cacher)');
-    return lines.join('\n');
+
+    if(player1Pad !== null && player2Pad !== null){
+      joinScreen = false;
+      joinText.setText('');
+    } else {
+      joinText.setText(
+        (player1Pad === null ? 'Joueur 1 : appuie sur ton bouton de saut\n' : 'Joueur 1 prêt !\n') +
+        (player2Pad === null ? 'Joueur 2 : appuie sur ton bouton de saut' : 'Joueur 2 prêt !')
+      );
+    }
   }
 
-  // -----------------------------------------------------------------
-  // movePlayer(player, pad, cfg, anims)
-  // N'utilise que pad.axes[] / pad.buttons[] (pas de pad.leftStick).
-  // Tolère pad === null (manette absente/débranchée) sans planter.
-  // -----------------------------------------------------------------
-  function movePlayer(player, pad, cfg, anims){
-    if(!pad || !pad.connected){
-      player.setVelocityX(0);
-      player.anims.play(anims.turn, true);
-      return;
-    }
+  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex){
+    if(!pad) return;
 
-    const axisObj = pad.axes && pad.axes[cfg.axis];
-    let value = axisObj ? axisObj.getValue() : 0;
-    if (cfg.invert) value = -value;
+    const deadzone = 0.2;
+    let moveX = 0;
+    const x = pad.leftStick.x;
+    const y = pad.leftStick.y;
+    const stickValue = Math.abs(x) > Math.abs(y) ? x : y;
+    if(Math.abs(stickValue) > deadzone) moveX = stickValue;
 
-    if(value < -DEADZONE){
+    if(moveX < 0){
       player.setVelocityX(-160);
-      player.anims.play(anims.left, true);
-    }
-    else if(value > DEADZONE){
+      player.anims.play(leftAnim, true);
+    } else if(moveX > 0){
       player.setVelocityX(160);
-      player.anims.play(anims.right, true);
-    }
-    else {
+      player.anims.play(rightAnim, true);
+    } else {
       player.setVelocityX(0);
-      player.anims.play(anims.turn, true);
+      player.anims.play(turnAnim);
     }
 
-    const jumpBtn = pad.buttons && pad.buttons[cfg.jump];
-    if(jumpBtn && jumpBtn.pressed && player.body.touching.down){
+    if(pad.buttons[jumpButtonIndex] && pad.buttons[jumpButtonIndex].pressed && player.body.touching.down){
       player.setVelocityY(-330);
     }
   }
@@ -302,10 +262,7 @@
     if(lives<=0 && !gameOver){
       gameOver=true;
       this.physics.pause();
-      player1.setTint(0xff0000);
-      player2.setTint(0xff0000);
-      player1.anims.play('turn1');
-      player2.anims.play('turn2');
+      player.setTint(0xff0000); player.anims.play('turn');
       saveScore();
     }
   }
