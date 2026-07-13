@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Game</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
+
+  <!-- Phaser -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background-color: #413d3d;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas { border: 4px solid #291515; }
+
+    /* Les icônes en haut */
+    .icon { cursor:pointer; width:105px; position:fixed; top:10px; }
+    .icon.home { left:10px; }
+    .icon.retour { left:125px; }
+    .icon.refresh { right:10px; }
+  </style>
+</head>
+<body>
+
+  <div id="game-wrapper"></div>
+
+<script>
+  // ==== Firebase ====
+  firebase.initializeApp({
+    apiKey: "AIzaSyBnQb5b5h62Jl4WeiKEBMeEmivbOK-B70k",
+    authDomain: "bombgo-classement.firebaseapp.com",
+    projectId: "bombgo-classement",
+    appId: "1:113313571513:web:73863b02df8193606ef168"
+  });
+  const db = firebase.firestore();
+
+  // ==== Device ID pour score unique ====
+  let deviceId = localStorage.getItem("deviceId");
+  if(!deviceId){ deviceId = crypto.randomUUID(); localStorage.setItem("deviceId", deviceId); }
+
+  let playerNickname = localStorage.getItem("playerNickname") || "player";
+
+  // ==== Variables globales ====
+  var player1, player2, cursors, stars, bombs, platforms, joinText, debugText;
+  var score1 = 0, score2 = 0, scoreText1, scoreText2;
+  var gameOver = false;
+  var currentLevel = 0;
+  var platformsArray = [];
+  var tremplin = null;
+
+  var JUMP_BUTTONS = [19, 21]; // les deux boutons SR (un par Joy-Con) déclenchent le saut, peu importe le joueur
+
+  // ==== Configuration des sticks ====
+  // Tes 2 Joy-Con sont vues par le navigateur comme UNE SEULE manette
+  // combinée : le stick de la Joy-Con gauche = axes 0/1, le stick de la
+  // Joy-Con droite = axes 2/3. Joueur 1 = Joy-Con gauche, joueur 2 = Joy-Con
+  // droite.
+  // invertX: passe à true si ce joueur part dans le mauvais sens quand tu
+  //          pousses le stick.
+  var CONTROLS = {
+    player1: { axisX: 0, invertX: false },
+    player2: { axisX: 2, invertX: false }
+  };
+
+  var joinScreen = true;
+
+  // ==== Layout des niveaux ====
+  var platformLayouts = [
+    [{x:600,y:400},{x:50,y:250},{x:750,y:220}],
+    [{x:150,y:350},{x:400,y:200},{x:650,y:300},{x:400,y:470}],
+    [{x:700,y:250},{x:80,y:150},{x:500,y:400}],
+    [{x:300,y:420},{x:40,y:200},{x:650,y:120},{x:400,y:300}],
+    [{x:200,y:380},{x:40,y:140},{x:600,y:240},{x:350,y:100}],
+    [{x:200,y:150},{x:500,y:310},{x:700,y:180},{x:350,y:460}],
+    [{x:100,y:380},{x:300,y:250},{x:500,y:150},{x:700,y:250}],
+    [{x:50,y:380},{x:250,y:200},{x:450,y:100},{x:650,y:200}],
+    [{x:400,y:380},{x:200,y:250},{x:600,y:150}],
+    [{x:100,y:500},{x:300,y:350},{x:500,y:200},{x:700,y:100}]
+  ];
+
+  // ==== Config Phaser ====
+  var config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    physics: { default: 'arcade', arcade: { gravity:{y:300}, debug:false } },
+    input: { gamepad: true },
+    scene: { preload, create, update }
+  };
+  new Phaser.Game(config);
+
+  function preload(){
+    this.load.image('sky','assets/sky.png');
+    this.load.image('ground','assets/platform.png');
+    this.load.image('star','assets/piece1.png');
+    this.load.image('bomb','assets/bombe.png');
+    this.load.image('vie','assets/vie1.png');
+    this.load.image('novie','assets/vie2.png');
+    this.load.image('tremplin','assets/tremplin.png');
+    this.load.spritesheet('dude1', 'assets/personnageframe1.png', {frameWidth:320, frameHeight:480});
+    this.load.spritesheet('dude2', 'assets/personnageframe2.png', {frameWidth:320, frameHeight:480});
+  }
+
+  function create(){
+    this.add.image(400,300,'sky');
+    scoreText1 = this.add.text(16,16,'Joueur 1: 0',{fontSize:'28px',fill:'#000'});
+    scoreText2 = this.add.text(584,16,'Joueur 2: 0',{fontSize:'28px',fill:'#000'});
+
+    joinText = this.add.text(400, 300, 'Appuie sur un bouton pour commencer\n(stick gauche = Joueur 1, stick droit = Joueur 2)', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
+    joinText.setDepth(1000);
+
+    debugText = this.add.text(16, 500, '', {fontSize:'16px', fill:'#fff', backgroundColor:'#000', padding:{x:8,y:4}});
+    debugText.setDepth(1000);
+
+    platforms = this.physics.add.staticGroup();
+    platforms.create(400,568,'ground').setScale(2).refreshBody();
+    createPlatformsForLevel(currentLevel);
+
+    player1 = this.physics.add.sprite(100, 450, 'dude1').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
+    player2 = this.physics.add.sprite(700, 450, 'dude2').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
+
+    this.anims.create({key:'left1', frames:this.anims.generateFrameNumbers('dude1',{start:0,end:3}), frameRate:10, repeat:-1});
+    this.anims.create({key:'turn1', frames:[{key:'dude1',frame:4}], frameRate:20});
+    this.anims.create({key:'right1', frames:this.anims.generateFrameNumbers('dude1',{start:5,end:8}), frameRate:10, repeat:-1});
+
+    this.anims.create({key:'left2', frames:this.anims.generateFrameNumbers('dude2',{start:0,end:3}), frameRate:10, repeat:-1});
+    this.anims.create({key:'turn2', frames:[{key:'dude2',frame:4}], frameRate:20});
+    this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude2',{start:5,end:8}), frameRate:10, repeat:-1});
+
+    cursors = this.input.keyboard.createCursorKeys();
+
+    stars = this.physics.add.group({key:'star', repeat:11, setXY:{x:12,y:0,stepX:70}});
+    stars.children.iterate(c => { c.setBounceY(Phaser.Math.FloatBetween(0.4,0.8)); c.setScale(0.015); });
+
+    bombs = this.physics.add.group();
+
+    this.physics.add.collider(player1, platforms);
+    this.physics.add.collider(player2, platforms);
+    this.physics.add.collider(stars, platforms);
+    this.physics.add.collider(bombs, platforms);
+    this.physics.add.overlap(player1, stars, collectStar, null, this);
+    this.physics.add.overlap(player2, stars, collectStar, null, this);
+    this.physics.add.collider(player1, bombs, hitBomb, null, this);
+    this.physics.add.collider(player2, bombs, hitBomb, null, this);
+  }
+
+  function update(){
+    if(gameOver) return;
+
+    try {
+      const gp = this.input.gamepad;
+      const allPads = gp ? gp.gamepads : [];
+
+      // ==== DEBUG PERMANENT : état brut de toutes les manettes connectées ====
+      let debug = 'Stage: ' + (joinScreen ? 'attente demarrage' : 'en jeu') + '\n';
+      allPads.forEach((pad, index) => {
+        if(!pad) return;
+        let axesStr = pad.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
+        let btnsStr = pad.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
+        debug += 'Pad'+index+' axes['+axesStr+'] btns['+btnsStr+']\n';
+      });
+      debugText.setText(debug);
+      // ==== FIN DEBUG ====
+
+      const { pad1, axis1, pad2, axis2 } = getControllerPads(allPads);
+
+      if(joinScreen){
+        handleStartScreen(pad1 || pad2);
+        return;
+      }
+
+      movePlayer(player1, pad1, axis1, 'left1', 'turn1', 'right1', JUMP_BUTTONS, CONTROLS.player1);
+      movePlayer(player2, pad2, axis2, 'left2', 'turn2', 'right2', JUMP_BUTTONS, CONTROLS.player2);
+    } catch(err) {
+      debugText.setText('ERREUR: ' + err.message);
+    }
+  }
+
+  // Détermine quelle(s) manette(s)/axe utiliser pour chaque joueur.
+  // - Si 2 manettes physiques distinctes sont connectées : chaque joueur a
+  //   la sienne, sur son axe 0 (gauche/droite du stick).
+  // - Si une seule manette est connectée (cas des 2 Joy-Con combinées en une
+  //   seule manette) : les deux joueurs partagent cette manette, joueur 1
+  //   utilise le stick gauche (axe 0), joueur 2 le stick droit (axe 2).
+  function getControllerPads(allPads){
+    const connected = allPads.filter(p => p);
+    if(connected.length >= 2){
+      return { pad1: connected[0], axis1: 0, pad2: connected[1], axis2: 0 };
+    }
+    const pad = connected[0] || null;
+    return { pad1: pad, axis1: CONTROLS.player1.axisX, pad2: pad, axis2: CONTROLS.player2.axisX };
+  }
+
+  function handleStartScreen(pad){
+    if(!pad){
+      joinText.setText('Connecte ta/tes manette(s) (Joy-Con)');
+      return;
+    }
+    const anyPressed = pad.buttons.some(b => b.pressed);
+    if(anyPressed){
+      joinScreen = false;
+      joinText.setText('');
+    } else {
+      joinText.setText('Appuie sur un bouton pour commencer\n(stick gauche = Joueur 1, stick droit = Joueur 2)');
+    }
+  }
+
+  function movePlayer(player, pad, axisX, leftAnim, turnAnim, rightAnim, jumpButtonIndices, controlConfig){
+    if(!pad) return;
+
+    const deadzone = 0.25;
+    let moveX = pad.axes[axisX] ? pad.axes[axisX].value : 0;
+    if(controlConfig.invertX) moveX = -moveX;
+    if(Math.abs(moveX) < deadzone) moveX = 0;
+
+    if(moveX < 0){
+      player.setVelocityX(-160);
+      player.anims.play(leftAnim, true);
+    } else if(moveX > 0){
+      player.setVelocityX(160);
+      player.anims.play(rightAnim, true);
+    } else {
+      player.setVelocityX(0);
+      player.anims.play(turnAnim);
+    }
+
+    const jumpPressed = jumpButtonIndices.some(i => pad.buttons[i] && pad.buttons[i].pressed);
+    if(jumpPressed && player.body.touching.down){
+      player.setVelocityY(-330);
+    }
+  }
+
+  function collectStar(player, star){
+    star.disableBody(true,true);
+    if(player === player1){
+      score1 += 10;
+      scoreText1.setText('Joueur 1: '+score1);
+    } else {
+      score2 += 10;
+      scoreText2.setText('Joueur 2: '+score2);
+    }
+    if(stars.countActive(true)===0){
+      changeLevel();
+      stars.children.iterate(c => c.enableBody(true,c.x,0,true,true));
+      let x = (player.x<400)?Phaser.Math.Between(400,800):Phaser.Math.Between(0,400);
+      let bomb = bombs.create(x,16,'bomb').setScale(0.015);
+      bomb.body.setSize(bomb.width*0.015, bomb.height*0.015);
+      bomb.body.setOffset(bomb.width*0.015, bomb.height*0.015);
+      bomb.setBounce(1).setCollideWorldBounds(true).setVelocity(Phaser.Math.Between(-200,200),20);
+    }
+  }
+
+  function hitBomb(player, bomb){
+    bomb.disableBody(true,true);
+    if(player === player1){
+      score1 = Math.max(0, score1 - 20);
+      scoreText1.setText('Joueur 1: '+score1);
+    } else {
+      score2 = Math.max(0, score2 - 20);
+      scoreText2.setText('Joueur 2: '+score2);
+    }
+  }
+
+  function saveScore() {
+    const ref = db.collection("scores").doc(deviceId);
+
+    ref.get().then(doc => {
+      if (!doc.exists) {
+        ref.set({ pseudo: playerNickname, score: score, date: Date.now() });
+        console.log("Nouveau score créé !");
+        return;
+      }
+
+      const oldData = doc.data();
+
+      if (score > oldData.score) {
+        ref.set({ pseudo: playerNickname, score: score, date: Date.now() });
+        console.log("Score mis à jour !");
+      } else if (playerNickname !== oldData.pseudo) {
+        ref.update({ pseudo: playerNickname });
+        console.log("Pseudo mis à jour !");
+      }
+    }).catch(err => console.error("Erreur saveScore:", err));
+  }
+
+  function createPlatformsForLevel(level){
+    platformsArray.forEach(p=>p.destroy());
+    platformsArray=[];
+    platformLayouts[level].forEach(pos=>platformsArray.push(platforms.create(pos.x,pos.y,'ground')));
+  }
+
+  function changeLevel(){
+    currentLevel = (currentLevel+1)%platformLayouts.length;
+    createPlatformsForLevel(currentLevel);
+  }
+
+</script>
+</body>
+</html>
