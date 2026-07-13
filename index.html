@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Solo.</title>
+  <title>Solo</title>
   <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
 
   <!-- Phaser -->
@@ -165,14 +165,14 @@
 
       let debug = 'P1Pad idx:'+player1Pad+' P2Pad idx:'+player2Pad+' | Connectees:'+connectedIndexes.join(',')+'\n';
       if(pad1){
-        let axesStr = pad1.axes.map((a,i)=>i+':'+a.toFixed(2)).join(' ');
+        let axesStr = pad1.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
         let btnsStr = pad1.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
         debug += 'P1 axes['+axesStr+'] btns['+btnsStr+']\n';
       } else {
         debug += 'P1: pad absent\n';
       }
       if(pad2){
-        let axesStr = pad2.axes.map((a,i)=>i+':'+a.toFixed(2)).join(' ');
+        let axesStr = pad2.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
         let btnsStr = pad2.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
         debug += 'P2 axes['+axesStr+'] btns['+btnsStr+']';
       } else {
@@ -221,7 +221,8 @@
     let moveX = 0;
     let maxAbs = 0;
     pad.axes.forEach(a => {
-      if(Math.abs(a) > maxAbs){ maxAbs = Math.abs(a); moveX = a; }
+      const v = a.value;
+      if(Math.abs(v) > maxAbs){ maxAbs = Math.abs(v); moveX = v; }
     });
     if(maxAbs <= deadzone) moveX = 0;
 
