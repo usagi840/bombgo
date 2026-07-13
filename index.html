@@ -61,10 +61,7 @@
 
   // ==== Configuration fixe des manettes (à ajuster ici directement) ====
   var JUMP_BUTTON = { player1: 12, player2: 2 };
-  var MOVE_AXIS = {
-    player1: { index: 0, invert: false },
-    player2: { index: 2, invert: false }
-  };
+  var axisExcluded = {}; // par index de manette, tableau de booléens (axe exclu car bloqué comme une gâchette)
 
   var joinScreen = true;
   var joinStage = 'p1assign';
@@ -178,8 +175,8 @@
       const pad1 = allPads[player1Pad];
       const pad2 = allPads[player2Pad];
 
-      movePlayer(player1, pad1, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1, MOVE_AXIS.player1);
-      movePlayer(player2, pad2, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2, MOVE_AXIS.player2);
+      movePlayer(player1, pad1, player1Pad, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1);
+      movePlayer(player2, pad2, player2Pad, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2);
     } catch(err) {
       debugText.setText('ERREUR: ' + err.message);
     }
@@ -220,17 +217,23 @@
     if(joinStage === 'done') joinText.setText('');
   }
 
-  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex, axisConfig){
+  function movePlayer(player, pad, padIndex, leftAnim, turnAnim, rightAnim, jumpButtonIndex){
     if(!pad) return;
+
+    // Première fois qu'on voit cette manette : on repère les axes bloqués (gâchettes, valeur proche de 1 ou -1 au repos)
+    if(!axisExcluded[padIndex]){
+      axisExcluded[padIndex] = pad.axes.map(a => Math.abs(a.value) > 0.5);
+    }
 
     const deadzone = 0.2;
     let moveX = 0;
-    const axisObj = pad.axes[axisConfig.index];
-    if(axisObj){
-      moveX = axisObj.value;
-      if(axisConfig.invert) moveX = -moveX;
-      if(Math.abs(moveX) <= deadzone) moveX = 0;
-    }
+    let maxAbs = 0;
+    pad.axes.forEach((a, i) => {
+      if(axisExcluded[padIndex][i]) return; // on ignore les axes repérés comme gâchettes
+      const v = a.value;
+      if(Math.abs(v) > maxAbs){ maxAbs = Math.abs(v); moveX = v; }
+    });
+    if(maxAbs <= deadzone) moveX = 0;
 
     if(moveX < 0){
       player.setVelocityX(-160);
