@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Configuration des manettes</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, Arial, sans-serif;
+    background: #292525;
+    color: #eee;
+    padding: 24px;
+  }
+  h1 { margin-top: 0; }
+  .intro {
+    background: #3a3535;
+    border-left: 4px solid #ffb347;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  #pads-list {
+    background: #201d1d;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    font-size: 14px;
+    min-height: 24px;
+  }
+  #pads-list .pad-line { padding: 2px 0; }
+  #pads-list .none { color: #888; }
+
+  .players-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 800px) {
+    .players-grid { grid-template-columns: 1fr; }
+  }
+
+  .player-card {
+    background: #322d2d;
+    border: 2px solid #4a4444;
+    border-radius: 8px;
+    padding: 16px;
+    transition: border-color 0.2s;
+  }
+  .player-card.active { border-color: #ffb347; }
+  .player-card h2 { margin-top: 0; display: flex; justify-content: space-between; align-items: center; }
+  .player-card h2 .badge {
+    font-size: 12px;
+    background: #4a4444;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: normal;
+  }
+
+  .row { margin: 10px 0; }
+  .row label { display: block; font-size: 13px; color: #bbb; margin-bottom: 4px; }
+  .value-box {
+    background: #201d1d;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-family: monospace;
+    font-size: 13px;
+    min-height: 18px;
+  }
+
+  button {
+    background: #5a4f4f;
+    color: #fff;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 13px;
+    margin-right: 6px;
+    margin-top: 4px;
+  }
+  button:hover { background: #6e6060; }
+  button:disabled { background: #3a3535; color: #777; cursor: not-allowed; }
+  button.listening { background: #ffb347; color: #222; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+  canvas.test-canvas {
+    background: #201d1d;
+    border-radius: 4px;
+    display: block;
+    margin-top: 4px;
+  }
+
+  .jump-indicator {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 6px 14px;
+    border-radius: 4px;
+    background: #201d1d;
+    color: #777;
+    font-weight: bold;
+    transition: background 0.05s, color 0.05s;
+  }
+  .jump-indicator.on { background: #4caf50; color: #fff; }
+
+  .axes-table, .buttons-table {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    font-family: monospace;
+    font-size: 11px;
+  }
+  .axes-table span, .buttons-table span {
+    background: #201d1d;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  .buttons-table span.pressed { background: #ffb347; color: #222; }
+
+  .global-controls {
+    margin-top: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  #status {
+    font-size: 13px;
+    color: #9be89b;
+    min-height: 18px;
+  }
+  #status.warn { color: #ffb347; }
+</style>
+</head>
+<body>
+
+<h1>🎮 Configuration des manettes</h1>
+<div class="intro">
+  1. Branchez / connectez vos deux manettes.<br>
+  2. Appuyez sur <b>n'importe quel bouton</b> de chaque manette pour qu'elle apparaisse dans "Manettes détectées" ci-dessous (le navigateur ne voit une manette qu'après une première pression).<br>
+  3. Pour chaque joueur : cliquez <b>"Assigner manette"</b> puis appuyez sur un bouton de la manette voulue, puis <b>"Détecter axe"</b> et bougez le stick, puis <b>"Détecter saut"</b> et appuyez sur le bouton de saut.<br>
+  4. Vérifiez avec le carré de test, puis cliquez <b>"Sauvegarder"</b> (ou touche <b>S</b>).
+</div>
+
+<div id="pads-list"><span class="none">Aucune manette détectée pour l'instant…</span></div>
+
+<div class="players-grid">
+
+  <div class="player-card" id="card-p1" data-player="p1">
+    <h2>Joueur 1 <span class="badge" id="badge-p1">non configuré</span></h2>
+
+    <div class="row">
+      <label>Manette assignée</label>
+      <div class="value-box" id="pad-assigned-p1">Aucune</div>
+      <button id="assign-p1">Assigner manette</button>
+    </div>
+
+    <div class="row">
+      <label>Axe horizontal</label>
+      <div class="value-box" id="axis-status-p1">Non défini</div>
+      <button id="detect-axis-p1">Détecter axe</button>
+    </div>
+
+    <div class="row">
+      <label>Bouton de saut</label>
+      <div class="value-box" id="jump-status-p1">Non défini</div>
+      <button id="detect-jump-p1">Détecter saut</button>
+    </div>
+
+    <div class="row">
+      <label>Test visuel</label>
+      <canvas class="test-canvas" id="canvas-p1" width="260" height="70"></canvas>
+      <div class="jump-indicator" id="jump-indicator-p1">SAUT</div>
+    </div>
+
+    <div class="row">
+      <label>Valeurs brutes (debug)</label>
+      <div class="axes-table" id="axes-raw-p1"></div>
+      <div class="buttons-table" id="buttons-raw-p1" style="margin-top:4px;"></div>
+    </div>
+  </div>
+
+  <div class="player-card" id="card-p2" data-player="p2">
+    <h2>Joueur 2 <span class="badge" id="badge-p2">non configuré</span></h2>
+
+    <div class="row">
+      <label>Manette assignée</label>
+      <div class="value-box" id="pad-assigned-p2">Aucune</div>
+      <button id="assign-p2">Assigner manette</button>
+    </div>
+
+    <div class="row">
+      <label>Axe horizontal</label>
+      <div class="value-box" id="axis-status-p2">Non défini</div>
+      <button id="detect-axis-p2">Détecter axe</button>
+    </div>
+
+    <div class="row">
+      <label>Bouton de saut</label>
+      <div class="value-box" id="jump-status-p2">Non défini</div>
+      <button id="detect-jump-p2">Détecter saut</button>
+    </div>
+
+    <div class="row">
+      <label>Test visuel</label>
+      <canvas class="test-canvas" id="canvas-p2" width="260" height="70"></canvas>
+      <div class="jump-indicator" id="jump-indicator-p2">SAUT</div>
+    </div>
+
+    <div class="row">
+      <label>Valeurs brutes (debug)</label>
+      <div class="axes-table" id="axes-raw-p2"></div>
+      <div class="buttons-table" id="buttons-raw-p2" style="margin-top:4px;"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="global-controls">
+  <button id="save-btn">💾 Sauvegarder (S)</button>
+  <button id="reset-btn">♻️ Réinitialiser tout</button>
+  <span id="status"></span>
+</div>
+
+<script>
+'use strict';
+
+// ---------------------------------------------------------------
+// Etat de configuration
+// ---------------------------------------------------------------
+const STORAGE_KEY = 'gamepadConfig';
+const DEADZONE_DETECT = 0.5; // seuil pour considérer qu'un axe est "activement bougé" pendant la détection
+const DEADZONE_GAME = 0.2;   // deadzone utilisée côté jeu (référence affichée ici)
+
+const config = {
+  p1: { padIndex: null, axis: null, jump: null },
+  p2: { padIndex: null, axis: null, jump: null }
+};
+
+// Mode d'écoute en cours par joueur : null | 'pad' | 'axis' | 'jump'
+const listening = { p1: null, p2: null };
+
+// Mémorise l'état "pressed" précédent de chaque bouton de chaque manette,
+// pour détecter les fronts montants (transition relâché -> pressé) sans
+// déclencher en boucle tant qu'un bouton reste maintenu.
+const prevButtonState = {}; // { padIndex: [bool, bool, ...] }
+
+let statusTimeout = null;
+
+// ---------------------------------------------------------------
+// Utilitaires
+// ---------------------------------------------------------------
+function setStatus(msg, isWarn) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = isWarn ? 'warn' : '';
+  clearTimeout(statusTimeout);
+  statusTimeout = setTimeout(() => { el.textContent = ''; }, 4000);
+}
+
+function getPads() {
+  // navigator.getGamepads() peut retourner un tableau avec des trous (null)
+  return navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
+}
+
+function otherPlayer(p) { return p === 'p1' ? 'p2' : 'p1'; }
+
+// ---------------------------------------------------------------
+// Affichage de la liste globale des manettes détectées
+// ---------------------------------------------------------------
+function renderPadsList(pads) {
+  const el = document.getElementById('pads-list');
+  const connected = pads.filter(p => p);
+  if (connected.length === 0) {
+    el.innerHTML = '<span class="none">Aucune manette détectée pour l\'instant… (appuyez sur un bouton de chaque manette)</span>';
+    return;
+  }
+  el.innerHTML = connected.map(p => {
+    const owner = config.p1.padIndex === p.index ? ' → assignée à P1'
+                : config.p2.padIndex === p.index ? ' → assignée à P2'
+                : '';
+    return `<div class="pad-line">#${p.index} — ${p.id}${owner}</div>`;
+  }).join('');
+}
+
+// ---------------------------------------------------------------
+// Mise à jour d'un panneau joueur
+// ---------------------------------------------------------------
+function updatePlayerPanel(p, pads) {
+  const state = config[p];
+  const pad = state.padIndex !== null ? pads[state.padIndex] : null;
+
+  document.getElementById('card-' + p).classList.toggle('active', listening[p] !== null);
+
+  // --- Manette assignée ---
+  document.getElementById('pad-assigned-' + p).textContent =
+    pad ? `#${pad.index} — ${pad.id}` : (state.padIndex !== null ? 'Manette débranchée !' : 'Aucune');
+
+  // --- Ecoute "assigner manette" ---
+  if (listening[p] === 'pad') {
+    document.getElementById('assign-' + p).classList.add('listening');
+    for (const cand of pads) {
+      if (!cand) continue;
+      const pressedSomething = cand.buttons.some(b => b.pressed || b.value > 0.5);
+      if (pressedSomething) {
+        state.padIndex = cand.index;
+        listening[p] = null;
+        setStatus(`Manette #${cand.index} assignée à ${p.toUpperCase()}.`);
+        break;
+      }
+    }
+  } else {
+    document.getElementById('assign-' + p).classList.remove('listening');
+  }
+
+  // --- Statut axe ---
+  document.getElementById('axis-status-' + p).textContent =
+    state.axis !== null ? `Axe ${state.axis}` : 'Non défini';
+
+  // --- Ecoute "détecter axe" ---
+  const axisBtn = document.getElementById('detect-axis-' + p);
+  axisBtn.classList.toggle('listening', listening[p] === 'axis');
+  axisBtn.disabled = state.padIndex === null;
+
+  if (listening[p] === 'axis' && pad) {
+    let bestIdx = -1, bestVal = 0;
+    pad.axes.forEach((v, idx) => {
+      if (Math.abs(v) > Math.abs(bestVal)) { bestVal = v; bestIdx = idx; }
+    });
+    if (bestIdx !== -1 && Math.abs(bestVal) > DEADZONE_DETECT) {
+      state.axis = bestIdx;
+      listening[p] = null;
+      setStatus(`Axe ${bestIdx} détecté pour ${p.toUpperCase()}.`);
+    }
+  }
+
+  // --- Statut saut ---
+  document.getElementById('jump-status-' + p).textContent =
+    state.jump !== null ? `Bouton ${state.jump}` : 'Non défini';
+
+  // --- Ecoute "détecter saut" (front montant) ---
+  const jumpBtn = document.getElementById('detect-jump-' + p);
+  jumpBtn.classList.toggle('listening', listening[p] === 'jump');
+  jumpBtn.disabled = state.padIndex === null;
+
+  if (pad) {
+    const key = pad.index;
+    if (!prevButtonState[key]) prevButtonState[key] = [];
+    const prev = prevButtonState[key];
+
+    if (listening[p] === 'jump') {
+      for (let i = 0; i < pad.buttons.length; i++) {
+        const isPressed = pad.buttons[i].pressed;
+        const wasPressed = !!prev[i];
+        if (isPressed && !wasPressed) {
+          state.jump = i;
+          listening[p] = null;
+          setStatus(`Bouton ${i} détecté comme saut pour ${p.toUpperCase()}.`);
+          break;
+        }
+      }
+    }
+
+    // maj mémoire des états précédents (toujours, même hors écoute)
+    pad.buttons.forEach((b, i) => { prev[i] = b.pressed; });
+  }
+
+  // --- Badge résumé ---
+  const badge = document.getElementById('badge-' + p);
+  const complete = state.padIndex !== null && state.axis !== null && state.jump !== null;
+  badge.textContent = complete ? 'prêt ✓' : 'non configuré';
+  badge.style.background = complete ? '#4caf50' : '#4a4444';
+
+  // --- Debug brut ---
+  const axesRaw = document.getElementById('axes-raw-' + p);
+  const buttonsRaw = document.getElementById('buttons-raw-' + p);
+  if (pad) {
+    axesRaw.innerHTML = pad.axes.map((v, i) =>
+      `<span${i === state.axis ? ' style="background:#ffb347;color:#222;"' : ''}>ax${i}=${v.toFixed(2)}</span>`
+    ).join('');
+    buttonsRaw.innerHTML = pad.buttons.map((b, i) =>
+      `<span class="${b.pressed ? 'pressed' : ''}"${i === state.jump ? ' style="outline:2px solid #4caf50;"' : ''}>b${i}</span>`
+    ).join('');
+  } else {
+    axesRaw.innerHTML = '<span class="none">—</span>';
+    buttonsRaw.innerHTML = '';
+  }
+
+  // --- Test visuel : carré qui bouge ---
+  drawTestSquare(p, pad, state);
+
+  // --- Indicateur de saut ---
+  const jumpOn = !!(pad && state.jump !== null && pad.buttons[state.jump] && pad.buttons[state.jump].pressed);
+  document.getElementById('jump-indicator-' + p).classList.toggle('on', jumpOn);
+}
+
+function drawTestSquare(p, pad, state) {
+  const canvas = document.getElementById('canvas-' + p);
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // ligne médiane
+  ctx.strokeStyle = '#4a4444';
+  ctx.beginPath();
+  ctx.moveTo(w / 2, 0);
+  ctx.lineTo(w / 2, h);
+  ctx.stroke();
+
+  let value = 0;
+  if (pad && state.axis !== null && pad.axes[state.axis] !== undefined) {
+    value = pad.axes[state.axis];
+  }
+
+  const squareSize = 24;
+  const range = (w - squareSize) / 2;
+  const x = w / 2 - squareSize / 2 + value * range;
+
+  ctx.fillStyle = Math.abs(value) > DEADZONE_GAME ? '#ffb347' : '#8fd3ff';
+  ctx.fillRect(x, h / 2 - squareSize / 2, squareSize, squareSize);
+}
+
+// ---------------------------------------------------------------
+// Boutons d'action
+// ---------------------------------------------------------------
+function armListening(p, mode) {
+  if (mode !== 'pad' && config[p].padIndex === null) {
+    setStatus(`Assignez d'abord une manette à ${p.toUpperCase()}.`, true);
+    return;
+  }
+  listening[p] = mode;
+}
+
+document.getElementById('assign-p1').addEventListener('click', () => armListening('p1', 'pad'));
+document.getElementById('assign-p2').addEventListener('click', () => armListening('p2', 'pad'));
+document.getElementById('detect-axis-p1').addEventListener('click', () => armListening('p1', 'axis'));
+document.getElementById('detect-axis-p2').addEventListener('click', () => armListening('p2', 'axis'));
+document.getElementById('detect-jump-p1').addEventListener('click', () => armListening('p1', 'jump'));
+document.getElementById('detect-jump-p2').addEventListener('click', () => armListening('p2', 'jump'));
+
+document.getElementById('save-btn').addEventListener('click', saveConfig);
+document.getElementById('reset-btn').addEventListener('click', resetConfig);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 's' || e.key === 'S') saveConfig();
+});
+
+function saveConfig() {
+  const missing = [];
+  ['p1', 'p2'].forEach(p => {
+    if (config[p].padIndex === null || config[p].axis === null || config[p].jump === null) {
+      missing.push(p.toUpperCase());
+    }
+  });
+  if (missing.length) {
+    setStatus(`Attention : ${missing.join(' et ')} incomplet(s). Sauvegarde quand même…`, true);
+  }
+  const payload = {
+    p1: { padIndex: config.p1.padIndex, axis: config.p1.axis, jump: config.p1.jump },
+    p2: { padIndex: config.p2.padIndex, axis: config.p2.axis, jump: config.p2.jump }
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  setStatus('Configuration sauvegardée ✓ — vous pouvez ouvrir game.html');
+}
+
+function resetConfig() {
+  config.p1 = { padIndex: null, axis: null, jump: null };
+  config.p2 = { padIndex: null, axis: null, jump: null };
+  listening.p1 = null;
+  listening.p2 = null;
+  localStorage.removeItem(STORAGE_KEY);
+  setStatus('Configuration réinitialisée.');
+}
+
+// Charge une éventuelle config existante au démarrage (pratique pour ré-ajuster)
+(function loadExisting() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (raw && raw.p1 && raw.p2) {
+      config.p1 = { padIndex: raw.p1.padIndex ?? null, axis: raw.p1.axis ?? null, jump: raw.p1.jump ?? null };
+      config.p2 = { padIndex: raw.p2.padIndex ?? null, axis: raw.p2.axis ?? null, jump: raw.p2.jump ?? null };
+    }
+  } catch (e) { /* pas de config valide, on garde les valeurs par défaut */ }
+})();
+
+// ---------------------------------------------------------------
+// Boucle principale
+// ---------------------------------------------------------------
+function loop() {
+  const pads = getPads();
+  renderPadsList(pads);
+  updatePlayerPanel('p1', pads);
+  updatePlayerPanel('p2', pads);
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('gamepadconnected', (e) => {
+  setStatus(`Manette connectée : #${e.gamepad.index} — ${e.gamepad.id}`);
+});
+window.addEventListener('gamepaddisconnected', (e) => {
+  setStatus(`Manette déconnectée : #${e.gamepad.index}`, true);
+  delete prevButtonState[e.gamepad.index];
+});
+
+requestAnimationFrame(loop);
+</script>
+
+</body>
+</html>
