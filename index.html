@@ -61,7 +61,6 @@
 
   // ==== Configuration fixe des manettes (à ajuster ici directement) ====
   var JUMP_BUTTON = { player1: 12, player2: 2 };
-  var axisExcluded = {}; // par index de manette, tableau de booléens (axe exclu car bloqué comme une gâchette)
 
   var joinScreen = true;
   var joinStage = 'p1assign';
@@ -220,20 +219,20 @@
   function movePlayer(player, pad, padIndex, leftAnim, turnAnim, rightAnim, jumpButtonIndex){
     if(!pad) return;
 
-    // Première fois qu'on voit cette manette : on repère les axes bloqués (gâchettes, valeur proche de 1 ou -1 au repos)
-    if(!axisExcluded[padIndex]){
-      axisExcluded[padIndex] = pad.axes.map(a => Math.abs(a.value) > 0.5);
-    }
-
     const deadzone = 0.2;
-    let moveX = 0;
-    let maxAbs = 0;
-    pad.axes.forEach((a, i) => {
-      if(axisExcluded[padIndex][i]) return; // on ignore les axes repérés comme gâchettes
-      const v = a.value;
-      if(Math.abs(v) > maxAbs){ maxAbs = Math.abs(v); moveX = v; }
-    });
-    if(maxAbs <= deadzone) moveX = 0;
+
+    // On utilise uniquement l'axe 0 (horizontal du stick gauche).
+    // Avant, le code cherchait l'axe avec la plus grande valeur absolue parmi
+    // tous les axes non exclus : si une gâchette (axe qui se déclenche plus tard,
+    // ex: LT/RT) n'était pas repérée au premier passage, sa valeur au repos
+    // (souvent -1) était prise pour un mouvement, ce qui faisait avancer le
+    // personnage tout seul. En se limitant à l'axe 0, on évite ce problème.
+    let moveX = pad.axes[0] ? pad.axes[0].value : 0;
+    if(Math.abs(moveX) <= deadzone) moveX = 0;
+
+    // Inversion : la manette renvoie une valeur négative quand on pousse à
+    // droite (et positive à gauche) avec ce mapping, d'où le sens inversé.
+    moveX = -moveX;
 
     if(moveX < 0){
       player.setVelocityX(-160);
