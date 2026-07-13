@@ -58,21 +58,25 @@
   var platformsArray = [];
   var tremplin = null;
 
-  var JUMP_BUTTONS = [19, 21]; // les deux boutons SR (un par Joy-Con) déclenchent le saut, peu importe le joueur
+  // ==== Configuration des manettes séparées ====
+  // Manette 1 (joueur 1) : saut = bouton 19
+  // Manette 2 (joueur 2) : saut = bouton 21
+  var JUMP_BUTTONS = {
+    player1: [19],
+    player2: [21]
+  };
 
-  // ==== Configuration des sticks ====
-  // Tes 2 Joy-Con sont vues par le navigateur comme UNE SEULE manette
-  // combinée : le stick de la Joy-Con gauche = axes 0/1, le stick de la
-  // Joy-Con droite = axes 2/3. Joueur 1 = Joy-Con gauche, joueur 2 = Joy-Con
-  // droite.
-  // invertX: passe à true si ce joueur part dans le mauvais sens quand tu
-  //          pousses le stick.
+  // Le stick de chaque manette est sur l'axe 0. invertX: passe à true si ce
+  // joueur part dans le mauvais sens quand tu pousses le stick.
   var CONTROLS = {
     player1: { axisX: 0, invertX: false },
-    player2: { axisX: 2, invertX: false }
+    player2: { axisX: 0, invertX: false }
   };
 
   var joinScreen = true;
+  var joinStage = 'p1assign';
+  var player1Pad = null, player2Pad = null;
+  var prevButtons = {};
 
   // ==== Layout des niveaux ====
   var platformLayouts = [
