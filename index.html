@@ -219,10 +219,11 @@
 
     const deadzone = 0.2;
     let moveX = 0;
-    const x = pad.leftStick.x;
-    const y = pad.leftStick.y;
-    const stickValue = Math.abs(x) > Math.abs(y) ? x : y;
-    if(Math.abs(stickValue) > deadzone) moveX = stickValue;
+    let maxAbs = 0;
+    pad.axes.forEach(a => {
+      if(Math.abs(a) > maxAbs){ maxAbs = Math.abs(a); moveX = a; }
+    });
+    if(maxAbs <= deadzone) moveX = 0;
 
     if(moveX < 0){
       player.setVelocityX(-160);
