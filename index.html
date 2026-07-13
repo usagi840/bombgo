@@ -52,8 +52,7 @@
 
   // ==== Variables globales ====
   var player1, player2, cursors, stars, bombs, platforms, joinText, debugText;
-  var score = 0, scoreText;
-  var lives = 3, lifeIcons = [];
+  var score1 = 0, score2 = 0, scoreText1, scoreText2;
   var gameOver = false;
   var currentLevel = 0;
   var platformsArray = [];
@@ -107,15 +106,14 @@
 
   function create(){
     this.add.image(400,300,'sky');
-    scoreText = this.add.text(16,16,'Score: 0',{fontSize:'32px',fill:'#000'});
+    scoreText1 = this.add.text(16,16,'Joueur 1: 0',{fontSize:'28px',fill:'#000'});
+    scoreText2 = this.add.text(584,16,'Joueur 2: 0',{fontSize:'28px',fill:'#000'});
 
     joinText = this.add.text(400, 300, 'Joueur 1 : appuie sur un bouton pour rejoindre', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
     joinText.setDepth(1000);
 
     debugText = this.add.text(16, 500, '', {fontSize:'16px', fill:'#fff', backgroundColor:'#000', padding:{x:8,y:4}});
     debugText.setDepth(1000);
-
-    for(let i=0;i<lives;i++) lifeIcons.push(this.add.image(40+i*45,70,'vie').setScale(0.02));
 
     platforms = this.physics.add.staticGroup();
     platforms.create(400,568,'ground').setScale(2).refreshBody();
@@ -270,8 +268,13 @@
 
   function collectStar(player, star){
     star.disableBody(true,true);
-    score += 10;
-    scoreText.setText('Score: '+score);
+    if(player === player1){
+      score1 += 10;
+      scoreText1.setText('Joueur 1: '+score1);
+    } else {
+      score2 += 10;
+      scoreText2.setText('Joueur 2: '+score2);
+    }
     if(stars.countActive(true)===0){
       changeLevel();
       stars.children.iterate(c => c.enableBody(true,c.x,0,true,true));
@@ -285,13 +288,12 @@
 
   function hitBomb(player, bomb){
     bomb.disableBody(true,true);
-    lives--;
-    if(lives>=0) lifeIcons[lives].setTexture('novie').setScale(0.02);
-    if(lives<=0 && !gameOver){
-      gameOver=true;
-      this.physics.pause();
-      player.setTint(0xff0000); player.anims.play('turn');
-      saveScore();
+    if(player === player1){
+      score1 = Math.max(0, score1 - 20);
+      scoreText1.setText('Joueur 1: '+score1);
+    } else {
+      score2 = Math.max(0, score2 - 20);
+      scoreText2.setText('Joueur 2: '+score2);
     }
   }
 
