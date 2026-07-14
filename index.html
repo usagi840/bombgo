@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Menu</title>
+  <title>Choix des personnages</title>
 
   <!-- Phaser -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
@@ -24,6 +24,7 @@
 <script>
   // ==== Personnages disponibles ====
   var CHAR_KEYS = ['perso1', 'perso2', 'perso3'];
+  var BIG_CHAR_KEYS = ['persobig1', 'persobig2', 'persobig3'];
 
   // ==== Config manettes (identique au jeu, à ajuster pareil si besoin) ====
   var JUMP_BUTTONS = {
@@ -45,6 +46,14 @@
   var prevJump = { player1: false, player2: false };
   var prevAnyButton = { player1: false, player2: false };
 
+  // Position des miniatures (bord) et du grand portrait pour chaque côté.
+  // Joueur 1 : miniatures collées au bord gauche, portrait vers le centre.
+  // Joueur 2 : miroir, miniatures collées au bord droit.
+  var LAYOUT = {
+    player1: { thumbX: 70, bigX: 260, titleX: 200 },
+    player2: { thumbX: 730, bigX: 540, titleX: 600 }
+  };
+
   var config = {
     type: Phaser.AUTO,
     width: 800,
@@ -63,6 +72,7 @@
 
   var slotBoxes = { player1: [], player2: [] };
   var slotImages = { player1: [], player2: [] };
+  var bigImages = { player1: null, player2: null };
   var readyTexts = { player1: null, player2: null };
   var connectTexts = { player1: null, player2: null };
   var startText, debugText, skyImage;
@@ -72,6 +82,9 @@
     this.load.image('perso1', 'assets/perso1.png');
     this.load.image('perso2', 'assets/perso2.png');
     this.load.image('perso3', 'assets/perso3.png');
+    this.load.image('persobig1', 'assets/persobig1.png');
+    this.load.image('persobig2', 'assets/persobig2.png');
+    this.load.image('persobig3', 'assets/persobig3.png');
   }
 
   function create() {
@@ -85,11 +98,11 @@
     divider.fillStyle(0x291515, 1);
     divider.fillRect(398, 0, 4, 600);
 
-    this.add.text(200, 30, 'JOUEUR 1', { fontSize: '28px', fontStyle: 'bold', fill: '#fff' }).setOrigin(0.5);
-    this.add.text(600, 30, 'JOUEUR 2', { fontSize: '28px', fontStyle: 'bold', fill: '#fff' }).setOrigin(0.5);
+    this.add.text(LAYOUT.player1.titleX, 30, 'JOUEUR 1', { fontSize: '28px', fontStyle: 'bold', fill: '#fff' }).setOrigin(0.5);
+    this.add.text(LAYOUT.player2.titleX, 30, 'JOUEUR 2', { fontSize: '28px', fontStyle: 'bold', fill: '#fff' }).setOrigin(0.5);
 
-    buildSide.call(this, 'player1', 200);
-    buildSide.call(this, 'player2', 600);
+    buildSide.call(this, 'player1');
+    buildSide.call(this, 'player2');
 
     startText = this.add.text(400, 560, '', { fontSize: '22px', fontStyle: 'bold', fill: '#ffd700', align: 'center' }).setOrigin(0.5);
 
@@ -97,10 +110,11 @@
     debugText.setDepth(1000);
   }
 
-  function buildSide(playerKey, centerX) {
-    const size = 90;
-    const gap = 24;
-    const startY = 110;
+  function buildSide(playerKey) {
+    const L = LAYOUT[playerKey];
+    const size = 70;
+    const gap = 20;
+    const startY = 130;
 
     CHAR_KEYS.forEach((key, i) => {
       const y = startY + i * (size + gap);
@@ -108,26 +122,29 @@
       const box = this.add.graphics();
       slotBoxes[playerKey].push(box);
 
-      const img = this.add.image(centerX, y, key).setDisplaySize(60, 60);
+      const img = this.add.image(L.thumbX, y, key).setDisplaySize(45, 45);
       slotImages[playerKey].push(img);
     });
 
-    readyTexts[playerKey] = this.add.text(centerX, startY + 3 * (size + gap) + 10, '', {
-      fontSize: '20px', fontStyle: 'bold', fill: '#7CFC00', align: 'center'
+    bigImages[playerKey] = this.add.image(L.bigX, 330, BIG_CHAR_KEYS[0]).setDisplaySize(210, 320);
+
+    readyTexts[playerKey] = this.add.text(L.thumbX, startY + 3 * (size + gap) + 10, '', {
+      fontSize: '18px', fontStyle: 'bold', fill: '#7CFC00', align: 'center'
     }).setOrigin(0.5, 0);
 
-    connectTexts[playerKey] = this.add.text(centerX, 300,
+    connectTexts[playerKey] = this.add.text(L.titleX, 300,
       (playerKey === 'player1' ? 'Joueur 1' : 'Joueur 2') + '\nappuie sur un bouton\npour te connecter',
       { fontSize: '22px', fontStyle: 'bold', fill: '#fff', align: 'center' }
     ).setOrigin(0.5);
 
-    drawSide.call(this, playerKey, centerX);
+    drawSide.call(this, playerKey);
   }
 
-  function drawSide(playerKey, centerX) {
-    const size = 90;
-    const gap = 24;
-    const startY = 110;
+  function drawSide(playerKey) {
+    const L = LAYOUT[playerKey];
+    const size = 70;
+    const gap = 20;
+    const startY = 130;
     const s = state[playerKey];
     const visible = s.phase !== 'connect';
 
@@ -142,15 +159,18 @@
       if (!visible) return;
 
       box.fillStyle(0xffffff, 1);
-      box.fillRect(centerX - size / 2, y - size / 2, size, size);
+      box.fillRect(L.thumbX - size / 2, y - size / 2, size, size);
 
       if (isSelected) {
         box.lineStyle(5, s.ready ? 0x7CFC00 : 0xffd700, 1);
       } else {
         box.lineStyle(3, 0x000000, 1);
       }
-      box.strokeRect(centerX - size / 2, y - size / 2, size, size);
+      box.strokeRect(L.thumbX - size / 2, y - size / 2, size, size);
     });
+
+    bigImages[playerKey].setVisible(visible);
+    bigImages[playerKey].setTexture(BIG_CHAR_KEYS[s.selection]);
 
     readyTexts[playerKey].setText(visible && s.ready ? 'PRÊT ✓' : '');
     connectTexts[playerKey].setVisible(!visible);
@@ -174,8 +194,8 @@
       const pad1 = allPads[player1Pad];
       const pad2 = allPads[player2Pad];
 
-      handleSide.call(this, 'player1', pad1, 200);
-      handleSide.call(this, 'player2', pad2, 600);
+      handleSide.call(this, 'player1', pad1);
+      handleSide.call(this, 'player2', pad2);
 
       if (state.player1.phase === 'select' && state.player1.ready &&
           state.player2.phase === 'select' && state.player2.ready) {
@@ -189,7 +209,7 @@
     }
   }
 
-  function handleSide(playerKey, pad, centerX) {
+  function handleSide(playerKey, pad) {
     const s = state[playerKey];
 
     if (s.phase === 'connect') {
@@ -208,7 +228,7 @@
       if (justPressed) {
         s.phase = 'select';
         skyImage.setVisible(true);
-        drawSide.call(this, playerKey, centerX);
+        drawSide.call(this, playerKey);
       }
       return;
     }
@@ -230,7 +250,7 @@
       // défiler en continu tant que le stick reste poussé).
       if (dir !== 0 && prevAxisDir[playerKey] === 0) {
         s.selection = (s.selection + dir + CHAR_KEYS.length) % CHAR_KEYS.length;
-        drawSide.call(this, playerKey, centerX);
+        drawSide.call(this, playerKey);
       }
       prevAxisDir[playerKey] = dir;
     }
@@ -238,7 +258,7 @@
     const jumpPressed = JUMP_BUTTONS[playerKey].some(i => pad.buttons[i] && pad.buttons[i].pressed);
     if (jumpPressed && !prevJump[playerKey]) {
       s.ready = !s.ready; // appuyer confirme, ré-appuyer permet de changer d'avis
-      drawSide.call(this, playerKey, centerX);
+      drawSide.call(this, playerKey);
     }
     prevJump[playerKey] = jumpPressed;
   }
