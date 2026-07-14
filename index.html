@@ -68,39 +68,72 @@
   var score1Text, score2Text;
 
   // ==== Config manettes (Joy-Con L / R) ====
-  // Chaque Joy-Con utilisé seul apparaît comme un gamepad séparé dans le
-  // navigateur (index 0 = premier branché/allumé, index 1 = second).
-  // Le mapping exact des boutons/stick dépend du navigateur/OS, donc on
-  // reste tolérant : on regarde le stick (axes) ET le d-pad (boutons)
-  // pour le déplacement, et plusieurs boutons possibles pour le saut.
-  // Astuce debug : appuie sur "D" pour afficher dans la console (F12)
-  // l'état brut de chaque manette et ajuster les index si besoin.
+  // Deux cas de figure possibles selon comment les Joy-Con sont appairés :
+  //
+  // CAS A - Joy-Con connectés SÉPARÉMENT (2 entrées dans navigator.getGamepads()) :
+  //   pad[0] = un Joy-Con, pad[1] = l'autre. Chacun a son propre stick sur axes[0]/[1].
+  //
+  // CAS B - Joy-Con appairés ENSEMBLE comme une seule manette (fréquent sous
+  //   Windows/Bluetooth) : une SEULE entrée dans navigator.getGamepads(), mais
+  //   avec le mapping "standard" habituel d'une manette Xbox-like :
+  //     - Joy-Con GAUCHE  -> axes[0]/[1] (stick gauche), croix directionnelle
+  //       (boutons 12-15), boutons L/ZL (4/6)
+  //     - Joy-Con DROIT   -> axes[2]/[3] (stick droit), boutons A/B/X/Y (0-3),
+  //       boutons R/ZR (5/7)
+  //   On détecte ce cas et on répartit automatiquement les 2 joueurs dessus.
+  //
+  // Astuce debug : appuie sur "P" en jeu pour afficher dans la console (F12)
+  // l'état brut des manettes détectées, si jamais il faut ajuster des index.
   const STICK_THRESHOLD = 0.35;
-  const JUMP_BUTTONS = [0, 1, 2, 3]; // essaie plusieurs boutons "action"
-  const DPAD_LEFT_BUTTON = 14;       // standard mapping (peut varier)
-  const DPAD_RIGHT_BUTTON = 15;
 
-  function getGamepadInput(padIndex){
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const pad = pads[padIndex];
-    if(!pad) return null;
+  function readStick(pad, axisIndex){
+    if(!pad.axes || pad.axes.length <= axisIndex) return {left:false,right:false};
+    const v = pad.axes[axisIndex];
+    return { left: v < -STICK_THRESHOLD, right: v > STICK_THRESHOLD };
+  }
+  function readButtons(pad, indices){
+    if(!pad.buttons) return false;
+    return indices.some(i => pad.buttons[i] && pad.buttons[i].pressed);
+  }
 
-    let left = false, right = false, jump = false;
+  function getPlayerInputs(){
+    const rawPads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const pads = Array.from(rawPads).filter(p => p && p.connected);
 
-    // Stick analogique (axes[0] = horizontal habituellement)
-    if(pad.axes && pad.axes.length > 0){
-      if(pad.axes[0] < -STICK_THRESHOLD) left = true;
-      if(pad.axes[0] > STICK_THRESHOLD) right = true;
+    let p1 = null, p2 = null;
+
+    if(pads.length >= 2){
+      // CAS A : deux manettes séparées
+      const s1 = readStick(pads[0], 0);
+      p1 = {
+        left: s1.left || readButtons(pads[0], [14]),
+        right: s1.right || readButtons(pads[0], [15]),
+        jump: readButtons(pads[0], [0,1,2,3,4,5,6,7])
+      };
+      const s2 = readStick(pads[1], 0);
+      p2 = {
+        left: s2.left || readButtons(pads[1], [14]),
+        right: s2.right || readButtons(pads[1], [15]),
+        jump: readButtons(pads[1], [0,1,2,3,4,5,6,7])
+      };
+    } else if(pads.length === 1){
+      // CAS B : une seule manette combinée (Joy-Con gauche + droit fusionnés)
+      const pad = pads[0];
+      const sLeft = readStick(pad, 0);   // stick du Joy-Con gauche
+      p1 = {
+        left: sLeft.left || readButtons(pad, [14]),   // dpad left
+        right: sLeft.right || readButtons(pad, [15]),  // dpad right
+        jump: readButtons(pad, [4,6,8])                // L, ZL, minus
+      };
+      const sRight = readStick(pad, 2);  // stick du Joy-Con droit
+      p2 = {
+        left: sRight.left,
+        right: sRight.right,
+        jump: readButtons(pad, [0,1,2,3,5,7,9])        // A/B/X/Y, R, ZR, plus
+      };
     }
-    // D-pad en secours
-    if(pad.buttons){
-      if(pad.buttons[DPAD_LEFT_BUTTON] && pad.buttons[DPAD_LEFT_BUTTON].pressed) left = true;
-      if(pad.buttons[DPAD_RIGHT_BUTTON] && pad.buttons[DPAD_RIGHT_BUTTON].pressed) right = true;
-      for(const idx of JUMP_BUTTONS){
-        if(pad.buttons[idx] && pad.buttons[idx].pressed) jump = true;
-      }
-    }
-    return { left, right, jump, connected:true };
+
+    return { p1, p2 };
   }
 
   window.addEventListener("gamepadconnected", (e) => {
@@ -145,6 +178,8 @@
   };
   new Phaser.Game(config);
 
+  var dude2LoadFailed = false;
+
   function preload(){
     this.load.image('sky','assets/sky.png');
     this.load.image('ground','assets/platform.png');
@@ -159,6 +194,13 @@
     // Personnage joueur 2 : un autre choisi (ou 2 par défaut, ou le même si un seul dispo)
     let char2 = localStorage.getItem('selectedCharacter2') || (char1 === '2' ? '1' : '2');
     this.load.spritesheet('dude2',`assets/personnageframe${char2}.png`,{frameWidth:320, frameHeight:480});
+
+    // Si l'asset du joueur 2 n'existe pas / ne charge pas, on ne bloque pas
+    // le reste du jeu : on retiendra qu'il faut retomber sur le sprite du J1.
+    this.load.on('loaderror', (file) => {
+      console.warn('Asset introuvable, ignoré:', file.key, file.src);
+      if(file.key === 'dude2') dude2LoadFailed = true;
+    });
   }
 
   function create(){
@@ -168,36 +210,52 @@
     score1Text = this.add.text(16,16,'J1: 0',{fontSize:'32px',fill:'#2255ff'});
     score2Text = this.add.text(650,16,'J2: 0',{fontSize:'32px',fill:'#ff3322'});
 
+    // ---- Éléments essentiels du monde d'abord : même si un sprite
+    // personnage a un souci, les pièces/plateformes/bombes existeront. ----
     platforms = this.physics.add.staticGroup();
     platforms.create(400,568,'ground').setScale(2).refreshBody();
     createPlatformsForLevel(currentLevel);
-
-    // Joueur 1
-    p1 = this.physics.add.sprite(100,450,'dude1').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
-    this.anims.create({key:'left1', frames:this.anims.generateFrameNumbers('dude1',{start:0,end:3}), frameRate:10, repeat:-1});
-    this.anims.create({key:'turn1', frames:[{key:'dude1',frame:4}], frameRate:20});
-    this.anims.create({key:'right1', frames:this.anims.generateFrameNumbers('dude1',{start:5,end:8}), frameRate:10, repeat:-1});
-
-    // Joueur 2
-    p2 = this.physics.add.sprite(700,450,'dude2').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
-    this.anims.create({key:'left2', frames:this.anims.generateFrameNumbers('dude2',{start:0,end:3}), frameRate:10, repeat:-1});
-    this.anims.create({key:'turn2', frames:[{key:'dude2',frame:4}], frameRate:20});
-    this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude2',{start:5,end:8}), frameRate:10, repeat:-1});
-
-    cursors = this.input.keyboard.createCursorKeys();
-    // Clavier secours joueur 2 : Z Q S D (ZQSD/AZERTY) -> gauche=Q, droite=D, saut=Z
-    this.keysP2 = this.input.keyboard.addKeys({left:'Q', right:'D', up:'Z'});
-
-    // Debug manette : touche D
-    this.input.keyboard.on('keydown-P', () => {
-      const pads = navigator.getGamepads();
-      console.log('État manettes:', pads);
-    });
 
     stars = this.physics.add.group({key:'star', repeat:11, setXY:{x:12,y:0,stepX:70}});
     stars.children.iterate(c => { c.setBounceY(Phaser.Math.FloatBetween(0.4,0.8)); c.setScale(0.015); });
 
     bombs = this.physics.add.group();
+
+    // ---- Joueur 1 ----
+    p1 = this.physics.add.sprite(100,450,'dude1').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
+    this.anims.create({key:'left1', frames:this.anims.generateFrameNumbers('dude1',{start:0,end:3}), frameRate:10, repeat:-1});
+    this.anims.create({key:'turn1', frames:[{key:'dude1',frame:4}], frameRate:20});
+    this.anims.create({key:'right1', frames:this.anims.generateFrameNumbers('dude1',{start:5,end:8}), frameRate:10, repeat:-1});
+
+    // ---- Joueur 2 : si son sprite dédié n'a pas chargé, on réutilise
+    // celui du joueur 1 (teinté en rouge pour le distinguer) plutôt que
+    // de laisser une texture cassée planter le reste du jeu. ----
+    const dude2Ready = this.textures.exists('dude2') && !dude2LoadFailed;
+    const p2Texture = dude2Ready ? 'dude2' : 'dude1';
+
+    p2 = this.physics.add.sprite(700,450,p2Texture).setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
+
+    if(dude2Ready){
+      this.anims.create({key:'left2', frames:this.anims.generateFrameNumbers('dude2',{start:0,end:3}), frameRate:10, repeat:-1});
+      this.anims.create({key:'turn2', frames:[{key:'dude2',frame:4}], frameRate:20});
+      this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude2',{start:5,end:8}), frameRate:10, repeat:-1});
+    } else {
+      // Réutilise les animations du joueur 1 (même texture 'dude1')
+      p2.setTexture('dude1');
+      p2.setTint(0xff6666);
+      this.anims.create({key:'left2', frames:this.anims.generateFrameNumbers('dude1',{start:0,end:3}), frameRate:10, repeat:-1});
+      this.anims.create({key:'turn2', frames:[{key:'dude1',frame:4}], frameRate:20});
+      this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude1',{start:5,end:8}), frameRate:10, repeat:-1});
+    }
+
+    cursors = this.input.keyboard.createCursorKeys();
+    // Clavier secours joueur 2 : Z Q S D (ZQSD/AZERTY) -> gauche=Q, droite=D, saut=Z
+    this.keysP2 = this.input.keyboard.addKeys({left:'Q', right:'D', up:'Z'});
+
+    // Debug manette : touche P
+    this.input.keyboard.on('keydown-P', () => {
+      console.log('État manettes:', navigator.getGamepads());
+    });
 
     this.physics.add.collider(p1, platforms);
     this.physics.add.collider(p2, platforms);
@@ -215,16 +273,16 @@
   }
 
   function update(){
-    // ---- Joueur 1 : manette 0 (Joy-Con premier branché), sinon flèches clavier ----
-    const pad1 = getGamepadInput(0);
+    const { p1: pad1, p2: pad2 } = getPlayerInputs();
+
+    // Joueur 1 : manette (Joy-Con gauche, seul ou fusionné), sinon flèches clavier
     handlePlayerMovement(p1, 1, {
       left: pad1 ? pad1.left : cursors.left.isDown,
       right: pad1 ? pad1.right : cursors.right.isDown,
       jump: pad1 ? pad1.jump : cursors.up.isDown
     });
 
-    // ---- Joueur 2 : manette 1 (Joy-Con second branché), sinon ZQSD clavier ----
-    const pad2 = getGamepadInput(1);
+    // Joueur 2 : manette (Joy-Con droit, seul ou fusionné), sinon ZQSD clavier
     handlePlayerMovement(p2, 2, {
       left: pad2 ? pad2.left : this.keysP2.left.isDown,
       right: pad2 ? pad2.right : this.keysP2.right.isDown,
