@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Choix des personnages</title>
+  <title>Menu</title>
 
   <!-- Phaser -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
@@ -32,8 +32,8 @@
   };
 
   var CONTROLS = {
-    player1: { axisNav: 0, invertNav: false }, // axe utilisé pour naviguer haut/bas
-    player2: { axisNav: 0, invertNav: false }
+    player1: { axisNav: 0, invertNav: true }, // axe utilisé pour naviguer haut/bas
+    player2: { axisNav: 0, invertNav: true }
   };
 
   // Repli manuel si la détection auto (L/R) ne trouve pas la bonne manette.
@@ -65,15 +65,21 @@
   var slotImages = { player1: [], player2: [] };
   var readyTexts = { player1: null, player2: null };
   var connectTexts = { player1: null, player2: null };
-  var startText, debugText;
+  var startText, debugText, skyImage;
 
   function preload() {
+    this.load.image('sky', 'assets/sky.png');
     this.load.image('perso1', 'assets/perso1.png');
     this.load.image('perso2', 'assets/perso2.png');
     this.load.image('perso3', 'assets/perso3.png');
   }
 
   function create() {
+    // Fond "sky", masqué tant que personne n'est connecté
+    skyImage = this.add.image(400, 300, 'sky');
+    skyImage.setDepth(-1);
+    skyImage.setVisible(false);
+
     // Ligne centrale séparant les deux côtés
     const divider = this.add.graphics();
     divider.fillStyle(0x291515, 1);
@@ -201,6 +207,7 @@
       prevAnyButton[playerKey] = anyPressed;
       if (justPressed) {
         s.phase = 'select';
+        skyImage.setVisible(true);
         drawSide.call(this, playerKey, centerX);
       }
       return;
