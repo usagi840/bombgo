@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Sky uniquement</title>
+<title>Menu</title>
 
 <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
 
@@ -38,9 +38,9 @@ new Phaser.Game(config);
 function preload() {
     this.load.image('sky', 'assets/sky.png');
 
-    this.load.image('piece1', 'assets/piece1.png');
-    this.load.image('piece2', 'assets/piece2.png');
-    this.load.image('piece3', 'assets/piece3.png');
+    this.load.image('perso1', 'assets/perso1.png');
+    this.load.image('perso2', 'assets/perso2.png');
+    this.load.image('perso3', 'assets/perso3.png');
 }
 
 function create() {
@@ -52,7 +52,7 @@ function create() {
     const size = 70;       // Taille des carrés
     const gap = 20;        // Espace entre les carrés
 
-    const pieces = ['piece1', 'piece2', 'piece3'];
+    const persos = ['perso1', 'perso2', 'perso3'];
 
     for (let i = 0; i < 3; i++) {
         const y = startY + i * (size + gap);
