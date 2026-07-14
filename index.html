@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Lobby</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
+  <style>
+    body {
+      margin: 0;
+      background-color: #413d3d;
+      color: #fff;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      gap: 30px;
+    }
+    h1 { margin-bottom: 0; }
+    .sous-titre { opacity: 0.7; margin-top: 4px; }
+
+    .panels {
+      display: flex;
+      gap: 30px;
+    }
+    .panel {
+      width: 260px;
+      height: 220px;
+      border: 4px solid #291515;
+      border-radius: 16px;
+      background: #55504f;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .panel.ready {
+      background: #2e7d32;
+      border-color: #a5d6a7;
+    }
+    .panel .titre {
+      font-size: 22px;
+      font-weight: bold;
+    }
+    .panel .bouton {
+      opacity: 0.75;
+      font-size: 14px;
+      margin-top: 6px;
+    }
+    .panel .statut {
+      margin-top: 18px;
+      font-size: 28px;
+      font-weight: bold;
+    }
+    .panel .padid {
+      margin-top: 8px;
+      font-size: 11px;
+      opacity: 0.6;
+      text-align: center;
+      padding: 0 10px;
+      word-break: break-word;
+    }
+
+    #countdown {
+      font-size: 40px;
+      font-weight: bold;
+      min-height: 50px;
+    }
+
+    #reset {
+      cursor: pointer;
+      background: #291515;
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    #debug {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      font-size: 12px;
+      background: #000;
+      padding: 6px 10px;
+      border-radius: 6px;
+      opacity: 0.7;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+
+  <div>
+    <h1 style="text-align:center;">Lobby</h1>
+    <div class="sous-titre" style="text-align:center;">Chaque joueur appuie sur le bouton de sa manette pour se déclarer prêt</div>
+  </div>
+
+  <div class="panels">
+    <div class="panel" id="panel1">
+      <div class="titre">Joueur 1</div>
+      <div class="bouton">Manette gauche — bouton 19</div>
+      <div class="statut" id="statut1">En attente…</div>
+      <div class="padid" id="padid1"></div>
+    </div>
+    <div class="panel" id="panel2">
+      <div class="titre">Joueur 2</div>
+      <div class="bouton">Manette droite — bouton 21</div>
+      <div class="statut" id="statut2">En attente…</div>
+      <div class="padid" id="padid2"></div>
+    </div>
+  </div>
+
+  <div id="countdown"></div>
+  <button id="reset">Réinitialiser</button>
+  <div id="debug"></div>
+
+<script>
+  // Nom du fichier de jeu vers lequel on redirige une fois les 2 joueurs prêts.
+  const GAME_FILE = "jeu.html";
+
+  // Boutons utilisés pour se déclarer prêt (mêmes indices que les sauts en jeu).
+  const READY_BUTTON = { player1: 19, player2: 21 };
+
+  let player1Pad = null; // { index, id }
+  let player2Pad = null; // { index, id }
+  let redirecting = false;
+
+  const panel1 = document.getElementById('panel1');
+  const panel2 = document.getElementById('panel2');
+  const statut1 = document.getElementById('statut1');
+  const statut2 = document.getElementById('statut2');
+  const padid1 = document.getElementById('padid1');
+  const padid2 = document.getElementById('padid2');
+  const countdownEl = document.getElementById('countdown');
+  const debugEl = document.getElementById('debug');
+
+  function markReady(playerNum, index, id){
+    if(playerNum === 1){
+      player1Pad = { index, id };
+      panel1.classList.add('ready');
+      statut1.textContent = 'PRÊT ✓';
+      padid1.textContent = id;
+    } else {
+      player2Pad = { index, id };
+      panel2.classList.add('ready');
+      statut2.textContent = 'PRÊT ✓';
+      padid2.textContent = id;
+    }
+  }
+
+  function resetAll(){
+    player1Pad = null;
+    player2Pad = null;
+    redirecting = false;
+    panel1.classList.remove('ready');
+    panel2.classList.remove('ready');
+    statut1.textContent = 'En attente…';
+    statut2.textContent = 'En attente…';
+    padid1.textContent = '';
+    padid2.textContent = '';
+    countdownEl.textContent = '';
+  }
+
+  document.getElementById('reset').addEventListener('click', resetAll);
+
+  function startCountdown(){
+    if(redirecting) return;
+    redirecting = true;
+    sessionStorage.setItem('gamepadAssignment', JSON.stringify({
+      player1: player1Pad,
+      player2: player2Pad
+    }));
+
+    let n = 3;
+    countdownEl.textContent = n;
+    const iv = setInterval(() => {
+      n--;
+      if(n <= 0){
+        clearInterval(iv);
+        window.location.href = GAME_FILE;
+      } else {
+        countdownEl.textContent = n;
+      }
+    }, 1000);
+  }
+
+  function loop(){
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    let debug = '';
+
+    for(let i=0; i<pads.length; i++){
+      const pad = pads[i];
+      if(!pad) continue;
+      debug += 'Pad'+i+' id="'+pad.id+'"\n';
+
+      const alreadyPlayer1 = player1Pad && player1Pad.index === i;
+      const alreadyPlayer2 = player2Pad && player2Pad.index === i;
+
+      // Une manette déjà assignée à un joueur ne peut pas devenir l'autre joueur.
+      if(!player1Pad && !alreadyPlayer2){
+        const btn = pad.buttons[READY_BUTTON.player1];
+        if(btn && btn.pressed){
+          markReady(1, i, pad.id);
+        }
+      }
+      if(!player2Pad && !alreadyPlayer1){
+        const btn = pad.buttons[READY_BUTTON.player2];
+        if(btn && btn.pressed){
+          markReady(2, i, pad.id);
+        }
+      }
+    }
+
+    debugEl.textContent = debug;
+
+    if(player1Pad && player2Pad && !redirecting){
+      startCountdown();
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>
