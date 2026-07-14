@@ -58,21 +58,24 @@
   var platformsArray = [];
   var tremplin = null;
 
-  var JUMP_BUTTONS = [19, 21]; // les deux boutons SR (un par Joy-Con) déclenchent le saut, peu importe le joueur
+  // ==== Configuration des manettes séparées ====
+  // Manette 1 (joueur 1) : saut = bouton 19
+  // Manette 2 (joueur 2) : saut = bouton 21
+  var JUMP_BUTTONS = {
+    player1: [19],
+    player2: [21]
+  };
 
-  // ==== Configuration des sticks ====
-  // Tes 2 Joy-Con sont vues par le navigateur comme UNE SEULE manette
-  // combinée : le stick de la Joy-Con gauche = axes 0/1, le stick de la
-  // Joy-Con droite = axes 2/3. Joueur 1 = Joy-Con gauche, joueur 2 = Joy-Con
-  // droite.
-  // invertX: passe à true si ce joueur part dans le mauvais sens quand tu
-  //          pousses le stick.
+  // Le stick de chaque manette est sur l'axe 0. invertX: passe à true si ce
+  // joueur part dans le mauvais sens quand tu pousses le stick.
   var CONTROLS = {
     player1: { axisX: 0, invertX: false },
-    player2: { axisX: 2, invertX: false }
+    player2: { axisX: 0, invertX: false }
   };
 
   var joinScreen = true;
+  var player1Pad = null, player2Pad = null;
+  var prevButtons = {};
 
   // ==== Layout des niveaux ====
   var platformLayouts = [
@@ -116,7 +119,7 @@
     scoreText1 = this.add.text(16,16,'Joueur 1: 0',{fontSize:'28px',fill:'#000'});
     scoreText2 = this.add.text(584,16,'Joueur 2: 0',{fontSize:'28px',fill:'#000'});
 
-    joinText = this.add.text(400, 300, 'Appuie sur un bouton pour commencer\n(stick gauche = Joueur 1, stick droit = Joueur 2)', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
+    joinText = this.add.text(400, 300, 'Joueur 1 : appuie sur un bouton pour rejoindre', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
     joinText.setDepth(1000);
 
     debugText = this.add.text(16, 500, '', {fontSize:'16px', fill:'#fff', backgroundColor:'#000', padding:{x:8,y:4}});
@@ -162,7 +165,7 @@
       const allPads = gp ? gp.gamepads : [];
 
       // ==== DEBUG PERMANENT : état brut de toutes les manettes connectées ====
-      let debug = 'Stage: ' + (joinScreen ? 'attente demarrage' : 'en jeu') + '\n';
+      let debug = 'Stage: ' + (joinScreen ? ('join p1=' + player1Pad + ' p2=' + player2Pad) : 'en jeu') + '\n';
       allPads.forEach((pad, index) => {
         if(!pad) return;
         let axesStr = pad.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
@@ -172,56 +175,96 @@
       debugText.setText(debug);
       // ==== FIN DEBUG ====
 
-      const { pad1, axis1, pad2, axis2 } = getControllerPads(allPads);
-
       if(joinScreen){
-        handleStartScreen(pad1 || pad2);
+        handleJoinScreen(allPads);
         return;
       }
 
-      movePlayer(player1, pad1, axis1, 'left1', 'turn1', 'right1', JUMP_BUTTONS, CONTROLS.player1);
-      movePlayer(player2, pad2, axis2, 'left2', 'turn2', 'right2', JUMP_BUTTONS, CONTROLS.player2);
+      const pad1 = allPads[player1Pad];
+      const pad2 = allPads[player2Pad];
+
+      movePlayer(player1, pad1, 'left1', 'turn1', 'right1', JUMP_BUTTONS.player1, CONTROLS.player1);
+      movePlayer(player2, pad2, 'left2', 'turn2', 'right2', JUMP_BUTTONS.player2, CONTROLS.player2);
     } catch(err) {
       debugText.setText('ERREUR: ' + err.message);
     }
   }
 
-  // Détermine quelle(s) manette(s)/axe utiliser pour chaque joueur.
-  // - Si 2 manettes physiques distinctes sont connectées : chaque joueur a
-  //   la sienne, sur son axe 0 (gauche/droite du stick).
-  // - Si une seule manette est connectée (cas des 2 Joy-Con combinées en une
-  //   seule manette) : les deux joueurs partagent cette manette, joueur 1
-  //   utilise le stick gauche (axe 0), joueur 2 le stick droit (axe 2).
-  function getControllerPads(allPads){
-    const connected = allPads.filter(p => p);
-    if(connected.length >= 2){
-      return { pad1: connected[0], axis1: 0, pad2: connected[1], axis2: 0 };
-    }
-    const pad = connected[0] || null;
-    return { pad1: pad, axis1: CONTROLS.player1.axisX, pad2: pad, axis2: CONTROLS.player2.axisX };
-  }
+  function handleJoinScreen(allPads){
+    // 1) Détection automatique via le nom de la manette (Joy-Con (L) / (R))
+    allPads.forEach((pad, index) => {
+      if(!pad) return;
+      const side = detectSide(pad);
+      if(side === 'L' && player1Pad === null && index !== player2Pad) player1Pad = index;
+      if(side === 'R' && player2Pad === null && index !== player1Pad) player2Pad = index;
+    });
 
-  function handleStartScreen(pad){
-    if(!pad){
-      joinText.setText('Connecte ta/tes manette(s) (Joy-Con)');
-      return;
-    }
-    const anyPressed = pad.buttons.some(b => b.pressed);
-    if(anyPressed){
-      joinScreen = false;
-      joinText.setText('');
+    // 2) Repli manuel : pour les manettes dont on n'a pas pu détecter le
+    // côté (id inconnu), on garde l'ancien système "appuie pour rejoindre"
+    let handledThisFrame = false;
+    allPads.forEach((pad, index) => {
+      if(!pad) return;
+      if(index === player1Pad || index === player2Pad) return; // déjà assignée
+      if(detectSide(pad) !== null) return; // sera gérée par la détection auto
+
+      pad.buttons.forEach((b, btnIndex) => {
+        const key = index + '_' + btnIndex;
+        const wasPressed = prevButtons[key] || false;
+        const justPressed = b.pressed && !wasPressed;
+        prevButtons[key] = b.pressed;
+
+        if(handledThisFrame || !justPressed) return;
+
+        if(player1Pad === null){
+          player1Pad = index;
+          handledThisFrame = true;
+        } else if(player2Pad === null && index !== player1Pad){
+          player2Pad = index;
+          handledThisFrame = true;
+        }
+      });
+    });
+
+    // 3) Une fois les 2 joueurs assignés, il faut un appui pour démarrer
+    if(player1Pad !== null && player2Pad !== null){
+      joinText.setText('Manettes prêtes ! Appuie sur un bouton pour commencer');
+      const anyPressed = allPads.some(pad => pad && pad.buttons.some(b => b.pressed));
+      if(anyPressed){
+        joinScreen = false;
+        joinText.setText('');
+      }
     } else {
-      joinText.setText('Appuie sur un bouton pour commencer\n(stick gauche = Joueur 1, stick droit = Joueur 2)');
+      let msg = '';
+      msg += player1Pad !== null ? 'Joueur 1 (manette L) : prêt ✓\n' : 'Joueur 1 (manette L) : en attente...\n';
+      msg += player2Pad !== null ? 'Joueur 2 (manette R) : prêt ✓' : 'Joueur 2 (manette R) : en attente...';
+      joinText.setText(msg);
     }
   }
 
-  function movePlayer(player, pad, axisX, leftAnim, turnAnim, rightAnim, jumpButtonIndices, controlConfig){
+  // Essaie de détecter si une manette est une Joy-Con (L) ou (R) via son id.
+  // Retourne 'L', 'R', ou null si on ne peut pas savoir.
+  function detectSide(pad){
+    if(!pad || !pad.id) return null;
+    const id = pad.id.toLowerCase();
+    if(id.includes('(l)') || id.includes('joy-con l') || id.includes('left')) return 'L';
+    if(id.includes('(r)') || id.includes('joy-con r') || id.includes('right')) return 'R';
+    return null;
+  }
+
+  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndices, controlConfig){
     if(!pad) return;
 
     const deadzone = 0.25;
-    let moveX = pad.axes[axisX] ? pad.axes[axisX].value : 0;
+    let moveX = pad.axes[controlConfig.axisX] ? pad.axes[controlConfig.axisX].value : 0;
     if(controlConfig.invertX) moveX = -moveX;
     if(Math.abs(moveX) < deadzone) moveX = 0;
+
+    // Filet de sécurité : si le stick ne bouge pas, on essaie la croix
+    // directionnelle via les boutons standards 14 (gauche) et 15 (droite).
+    if(moveX === 0 && pad.buttons[14] && pad.buttons[15]){
+      if(pad.buttons[14].pressed) moveX = -1;
+      else if(pad.buttons[15].pressed) moveX = 1;
+    }
 
     if(moveX < 0){
       player.setVelocityX(-160);
