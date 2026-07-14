@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Solo</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
+
+  <!-- Phaser -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background-color: #413d3d;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas { border: 4px solid #291515; }
+
+    /* Les icônes en haut */
+    .icon { cursor:pointer; width:105px; position:fixed; top:10px; }
+    .icon.home { left:10px; }
+    .icon.retour { left:125px; }
+    .icon.refresh { right:10px; }
+  </style>
+</head>
+<body>
+
+  <div id="game-wrapper"></div>
+
+<script>
+  // ==== Firebase ====
+  firebase.initializeApp({
+    apiKey: "AIzaSyBnQb5b5h62Jl4WeiKEBMeEmivbOK-B70k",
+    authDomain: "bombgo-classement.firebaseapp.com",
+    projectId: "bombgo-classement",
+    appId: "1:113313571513:web:73863b02df8193606ef168"
+  });
+  const db = firebase.firestore();
+
+  // ==== Device ID pour score unique ====
+  let deviceId = localStorage.getItem("deviceId");
+  if(!deviceId){ deviceId = crypto.randomUUID(); localStorage.setItem("deviceId", deviceId); }
+
+  let playerNickname = localStorage.getItem("playerNickname") || "player";
+
+  // ==== Variables globales ====
+  var player1, player2, cursors, stars, bombs, platforms, debugText;
+  var score1 = 0, score2 = 0, scoreText1, scoreText2;
+  var gameOver = false;
+  var currentLevel = 0;
+  var platformsArray = [];
+  var tremplin = null;
+
+  // ==== Configuration des manettes séparées ====
+  // Manette 1 (joueur 1) : saut = bouton 19
+  // Manette 2 (joueur 2) : saut = bouton 21
+  var JUMP_BUTTONS = {
+    player1: [19],
+    player2: [21]
+  };
+
+  // Le stick de chaque manette est sur l'axe 0. invertX: passe à true si ce
+  // joueur part dans le mauvais sens quand tu pousses le stick.
+  // axisX: une Joy-Con tenue à l'horizontale renvoie souvent son stick sur
+  // l'axe 1 (vertical) plutôt que 0, ce qui donne l'effet "tourné de 90°".
+  var CONTROLS = {
+    player1: { axisX: 1, invertX: false },
+    player2: { axisX: 1, invertX: false }
+  };
+
+  // Repli manuel : si un joueur ne bouge pas du tout, regarde le texte de
+  // debug en bas de l'écran (il affiche maintenant l'id de chaque Pad).
+  // Mets ici le numéro de Pad correspondant pour forcer l'assignation.
+  // Laisse à null pour garder la détection automatique.
+  var MANUAL_PAD = { player1: null, player2: null };
+
+  var player1Pad = null, player2Pad = null;
+
+  // ==== Layout des niveaux ====
+  var platformLayouts = [
+    [{x:600,y:400},{x:50,y:250},{x:750,y:220}],
+    [{x:150,y:350},{x:400,y:200},{x:650,y:300},{x:400,y:470}],
+    [{x:700,y:250},{x:80,y:150},{x:500,y:400}],
+    [{x:300,y:420},{x:40,y:200},{x:650,y:120},{x:400,y:300}],
+    [{x:200,y:380},{x:40,y:140},{x:600,y:240},{x:350,y:100}],
+    [{x:200,y:150},{x:500,y:310},{x:700,y:180},{x:350,y:460}],
+    [{x:100,y:380},{x:300,y:250},{x:500,y:150},{x:700,y:250}],
+    [{x:50,y:380},{x:250,y:200},{x:450,y:100},{x:650,y:200}],
+    [{x:400,y:380},{x:200,y:250},{x:600,y:150}],
+    [{x:100,y:500},{x:300,y:350},{x:500,y:200},{x:700,y:100}]
+  ];
+
+  // ==== Config Phaser ====
+  var config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    physics: { default: 'arcade', arcade: { gravity:{y:300}, debug:false } },
+    input: { gamepad: true },
+    scene: { preload, create, update }
+  };
+  new Phaser.Game(config);
+
+  function preload(){
+    this.load.image('sky','assets/sky.png');
+    this.load.image('ground','assets/platform.png');
+    this.load.image('star','assets/piece1.png');
+    this.load.image('bomb','assets/bombe.png');
+    this.load.image('vie','assets/vie1.png');
+    this.load.image('novie','assets/vie2.png');
+    this.load.image('tremplin','assets/tremplin.png');
+    this.load.spritesheet('dude1', 'assets/personnageframe1.png', {frameWidth:320, frameHeight:480});
+    this.load.spritesheet('dude2', 'assets/personnageframe2.png', {frameWidth:320, frameHeight:480});
+  }
+
+  function create(){
+    this.add.image(400,300,'sky');
+    scoreText1 = this.add.text(16,16,'Joueur 1: 0',{fontSize:'28px',fill:'#000'});
+    scoreText2 = this.add.text(584,16,'Joueur 2: 0',{fontSize:'28px',fill:'#000'});
+
+    debugText = this.add.text(16, 500, '', {fontSize:'16px', fill:'#fff', backgroundColor:'#000', padding:{x:8,y:4}});
+    debugText.setDepth(1000);
+
+    platforms = this.physics.add.staticGroup();
+    platforms.create(400,568,'ground').setScale(2).refreshBody();
+    createPlatformsForLevel(currentLevel);
+
+    player1 = this.physics.add.sprite(100, 450, 'dude1').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
+    player2 = this.physics.add.sprite(700, 450, 'dude2').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
+
+    this.anims.create({key:'left1', frames:this.anims.generateFrameNumbers('dude1',{start:0,end:3}), frameRate:10, repeat:-1});
+    this.anims.create({key:'turn1', frames:[{key:'dude1',frame:4}], frameRate:20});
+    this.anims.create({key:'right1', frames:this.anims.generateFrameNumbers('dude1',{start:5,end:8}), frameRate:10, repeat:-1});
+
+    this.anims.create({key:'left2', frames:this.anims.generateFrameNumbers('dude2',{start:0,end:3}), frameRate:10, repeat:-1});
+    this.anims.create({key:'turn2', frames:[{key:'dude2',frame:4}], frameRate:20});
+    this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude2',{start:5,end:8}), frameRate:10, repeat:-1});
+
+    cursors = this.input.keyboard.createCursorKeys();
+
+    stars = this.physics.add.group({key:'star', repeat:11, setXY:{x:12,y:0,stepX:70}});
+    stars.children.iterate(c => { c.setBounceY(Phaser.Math.FloatBetween(0.4,0.8)); c.setScale(0.015); });
+
+    bombs = this.physics.add.group();
+
+    this.physics.add.collider(player1, platforms);
+    this.physics.add.collider(player2, platforms);
+    this.physics.add.collider(stars, platforms);
+    this.physics.add.collider(bombs, platforms);
+    this.physics.add.overlap(player1, stars, collectStar, null, this);
+    this.physics.add.overlap(player2, stars, collectStar, null, this);
+    this.physics.add.collider(player1, bombs, hitBomb, null, this);
+    this.physics.add.collider(player2, bombs, hitBomb, null, this);
+  }
+
+  function update(){
+    if(gameOver) return;
+
+    try {
+      const gp = this.input.gamepad;
+      const allPads = gp ? gp.gamepads : [];
+
+      // ==== DEBUG PERMANENT : état brut de toutes les manettes connectées ====
+      let debug = 'p1=' + player1Pad + ' p2=' + player2Pad + '\n';
+      allPads.forEach((pad, index) => {
+        if(!pad) return;
+        let axesStr = pad.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
+        let btnsStr = pad.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
+        debug += 'Pad'+index+' id="'+pad.id+'"\n  axes['+axesStr+'] btns['+btnsStr+']\n';
+      });
+      debugText.setText(debug);
+      // ==== FIN DEBUG ====
+
+      assignPads(allPads);
+
+      const pad1 = allPads[player1Pad];
+      const pad2 = allPads[player2Pad];
+
+      movePlayer(player1, pad1, 'left1', 'turn1', 'right1', JUMP_BUTTONS.player1, CONTROLS.player1);
+      movePlayer(player2, pad2, 'left2', 'turn2', 'right2', JUMP_BUTTONS.player2, CONTROLS.player2);
+    } catch(err) {
+      debugText.setText('ERREUR: ' + err.message);
+    }
+  }
+
+  // Assigne automatiquement les manettes aux joueurs, à chaque frame (pour
+  // gérer les (re)connexions en cours de partie). Priorité à la détection
+  // via l'id (Joy-Con (L) = joueur 1, (R) = joueur 2) ; les manettes non
+  // reconnues sont assignées dans l'ordre aux emplacements restants.
+  function assignPads(allPads){
+    // Repli manuel prioritaire si configuré
+    if(MANUAL_PAD.player1 !== null) player1Pad = MANUAL_PAD.player1;
+    if(MANUAL_PAD.player2 !== null) player2Pad = MANUAL_PAD.player2;
+    if(MANUAL_PAD.player1 !== null && MANUAL_PAD.player2 !== null) return;
+
+    let lIndex = null, rIndex = null;
+    const others = [];
+
+    allPads.forEach((pad, index) => {
+      if(!pad) return;
+      if(index === MANUAL_PAD.player1 || index === MANUAL_PAD.player2) return;
+      const side = detectSide(pad);
+      if(side === 'L' && lIndex === null) lIndex = index;
+      else if(side === 'R' && rIndex === null) rIndex = index;
+      else others.push(index);
+    });
+
+    if(MANUAL_PAD.player1 === null){
+      if(lIndex !== null) player1Pad = lIndex;
+      else if(player1Pad === null && others.length) player1Pad = others.shift();
+    }
+
+    if(MANUAL_PAD.player2 === null){
+      if(rIndex !== null) player2Pad = rIndex;
+      else if(player2Pad === null && others.length) player2Pad = others.shift();
+    }
+  }
+
+  // Essaie de détecter si une manette est une Joy-Con (L) ou (R) via son id.
+  // Retourne 'L', 'R', ou null si on ne peut pas savoir.
+  function detectSide(pad){
+    if(!pad || !pad.id) return null;
+    const id = pad.id.toLowerCase();
+    if(id.includes('(l)') || id.includes('joy-con l') || id.includes('left')) return 'L';
+    if(id.includes('(r)') || id.includes('joy-con r') || id.includes('right')) return 'R';
+    return null;
+  }
+
+  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndices, controlConfig){
+    if(!pad) return;
+
+    const deadzone = 0.25;
+    let moveX = pad.axes[controlConfig.axisX] ? pad.axes[controlConfig.axisX].value : 0;
+    if(controlConfig.invertX) moveX = -moveX;
+    if(Math.abs(moveX) < deadzone) moveX = 0;
+
+    // Filet de sécurité : si le stick ne bouge pas, on essaie la croix
+    // directionnelle via les boutons standards 14 (gauche) et 15 (droite).
+    if(moveX === 0 && pad.buttons[14] && pad.buttons[15]){
+      if(pad.buttons[14].pressed) moveX = -1;
+      else if(pad.buttons[15].pressed) moveX = 1;
+    }
+
+    if(moveX < 0){
+      player.setVelocityX(-160);
+      player.anims.play(leftAnim, true);
+    } else if(moveX > 0){
+      player.setVelocityX(160);
+      player.anims.play(rightAnim, true);
+    } else {
+      player.setVelocityX(0);
+      player.anims.play(turnAnim);
+    }
+
+    const jumpPressed = jumpButtonIndices.some(i => pad.buttons[i] && pad.buttons[i].pressed);
+    if(jumpPressed && player.body.touching.down){
+      player.setVelocityY(-330);
+    }
+  }
+
+  function collectStar(player, star){
+    star.disableBody(true,true);
+    if(player === player1){
+      score1 += 10;
+      scoreText1.setText('Joueur 1: '+score1);
+    } else {
+      score2 += 10;
+      scoreText2.setText('Joueur 2: '+score2);
+    }
+    if(stars.countActive(true)===0){
+      changeLevel();
+      stars.children.iterate(c => c.enableBody(true,c.x,0,true,true));
+      let x = (player.x<400)?Phaser.Math.Between(400,800):Phaser.Math.Between(0,400);
+      let bomb = bombs.create(x,16,'bomb').setScale(0.015);
+      bomb.body.setSize(bomb.width*0.015, bomb.height*0.015);
+      bomb.body.setOffset(bomb.width*0.015, bomb.height*0.015);
+      bomb.setBounce(1).setCollideWorldBounds(true).setVelocity(Phaser.Math.Between(-200,200),20);
+    }
+  }
+
+  function hitBomb(player, bomb){
+    bomb.disableBody(true,true);
+    if(player === player1){
+      score1 = Math.max(0, score1 - 20);
+      scoreText1.setText('Joueur 1: '+score1);
+    } else {
+      score2 = Math.max(0, score2 - 20);
+      scoreText2.setText('Joueur 2: '+score2);
+    }
+  }
+
+  function saveScore() {
+    const ref = db.collection("scores").doc(deviceId);
+
+    ref.get().then(doc => {
+      if (!doc.exists) {
+        ref.set({ pseudo: playerNickname, score: score, date: Date.now() });
+        console.log("Nouveau score créé !");
+        return;
+      }
+
+      const oldData = doc.data();
+
+      if (score > oldData.score) {
+        ref.set({ pseudo: playerNickname, score: score, date: Date.now() });
+        console.log("Score mis à jour !");
+      } else if (playerNickname !== oldData.pseudo) {
+        ref.update({ pseudo: playerNickname });
+        console.log("Pseudo mis à jour !");
+      }
+    }).catch(err => console.error("Erreur saveScore:", err));
+  }
+
+  function createPlatformsForLevel(level){
+    platformsArray.forEach(p=>p.destroy());
+    platformsArray=[];
+    platformLayouts[level].forEach(pos=>platformsArray.push(platforms.create(pos.x,pos.y,'ground')));
+  }
+
+  function changeLevel(){
+    currentLevel = (currentLevel+1)%platformLayouts.length;
+    createPlatformsForLevel(currentLevel);
+  }
+
+</script>
+</body>
+</html>
