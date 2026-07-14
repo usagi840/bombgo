@@ -43,24 +43,28 @@
   var player1Pad = null, player2Pad = null;
   var prevAxisDir = { player1: 0, player2: 0 };
   var prevJump = { player1: false, player2: false };
+  var prevAnyButton = { player1: false, player2: false };
 
   var config = {
     type: Phaser.AUTO,
     width: 800,
     height: 600,
+    backgroundColor: '#413d3d',
     input: { gamepad: true },
     scene: { preload, create, update }
   };
   new Phaser.Game(config);
 
+  // phase: 'connect' -> 'select' -> (ready true/false géré à part)
   var state = {
-    player1: { selection: 0, ready: false },
-    player2: { selection: 0, ready: false }
+    player1: { phase: 'connect', selection: 0, ready: false },
+    player2: { phase: 'connect', selection: 0, ready: false }
   };
 
   var slotBoxes = { player1: [], player2: [] };
   var slotImages = { player1: [], player2: [] };
   var readyTexts = { player1: null, player2: null };
+  var connectTexts = { player1: null, player2: null };
   var startText, debugText;
 
   function preload() {
@@ -70,11 +74,10 @@
   }
 
   function create() {
-    // Fond dans le style du jeu
-    this.add.rectangle(400, 300, 800, 600, 0x413d3d);
-
     // Ligne centrale séparant les deux côtés
-    this.add.rectangle(400, 300, 4, 600, 0x291515);
+    const divider = this.add.graphics();
+    divider.fillStyle(0x291515, 1);
+    divider.fillRect(398, 0, 4, 600);
 
     this.add.text(200, 30, 'JOUEUR 1', { fontSize: '28px', fontStyle: 'bold', fill: '#fff' }).setOrigin(0.5);
     this.add.text(600, 30, 'JOUEUR 2', { fontSize: '28px', fontStyle: 'bold', fill: '#fff' }).setOrigin(0.5);
@@ -107,6 +110,11 @@
       fontSize: '20px', fontStyle: 'bold', fill: '#7CFC00', align: 'center'
     }).setOrigin(0.5, 0);
 
+    connectTexts[playerKey] = this.add.text(centerX, 300,
+      (playerKey === 'player1' ? 'Joueur 1' : 'Joueur 2') + '\nappuie sur un bouton\npour te connecter',
+      { fontSize: '22px', fontStyle: 'bold', fill: '#fff', align: 'center' }
+    ).setOrigin(0.5);
+
     drawSide.call(this, playerKey, centerX);
   }
 
@@ -115,13 +123,18 @@
     const gap = 24;
     const startY = 110;
     const s = state[playerKey];
+    const visible = s.phase !== 'connect';
 
     CHAR_KEYS.forEach((key, i) => {
       const y = startY + i * (size + gap);
       const box = slotBoxes[playerKey][i];
       const isSelected = s.selection === i;
 
+      slotImages[playerKey][i].setVisible(visible);
+
       box.clear();
+      if (!visible) return;
+
       box.fillStyle(0xffffff, 1);
       box.fillRect(centerX - size / 2, y - size / 2, size, size);
 
@@ -133,7 +146,8 @@
       box.strokeRect(centerX - size / 2, y - size / 2, size, size);
     });
 
-    readyTexts[playerKey].setText(s.ready ? 'PRÊT ✓' : '');
+    readyTexts[playerKey].setText(visible && s.ready ? 'PRÊT ✓' : '');
+    connectTexts[playerKey].setVisible(!visible);
   }
 
   function update() {
@@ -154,10 +168,11 @@
       const pad1 = allPads[player1Pad];
       const pad2 = allPads[player2Pad];
 
-      handlePlayer.call(this, 'player1', pad1, 200);
-      handlePlayer.call(this, 'player2', pad2, 600);
+      handleSide.call(this, 'player1', pad1, 200);
+      handleSide.call(this, 'player2', pad2, 600);
 
-      if (state.player1.ready && state.player2.ready) {
+      if (state.player1.phase === 'select' && state.player1.ready &&
+          state.player2.phase === 'select' && state.player2.ready) {
         startText.setText('Prêt à commencer !');
         goToGameIfConfirmed(allPads);
       } else {
@@ -168,9 +183,31 @@
     }
   }
 
-  function handlePlayer(playerKey, pad, centerX) {
-    if (!pad) return;
+  function handleSide(playerKey, pad, centerX) {
     const s = state[playerKey];
+
+    if (s.phase === 'connect') {
+      if (!pad) {
+        connectTexts[playerKey].setText(
+          (playerKey === 'player1' ? 'Joueur 1' : 'Joueur 2') + '\nen attente de connexion...'
+        );
+        return;
+      }
+      connectTexts[playerKey].setText(
+        (playerKey === 'player1' ? 'Joueur 1' : 'Joueur 2') + '\nappuie sur un bouton\npour te connecter'
+      );
+      const anyPressed = pad.buttons.some(b => b.pressed);
+      const justPressed = anyPressed && !prevAnyButton[playerKey];
+      prevAnyButton[playerKey] = anyPressed;
+      if (justPressed) {
+        s.phase = 'select';
+        drawSide.call(this, playerKey, centerX);
+      }
+      return;
+    }
+
+    // phase === 'select'
+    if (!pad) return;
     const control = CONTROLS[playerKey];
 
     if (!s.ready) {
