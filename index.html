@@ -83,12 +83,15 @@
       position: fixed;
       bottom: 10px;
       left: 10px;
+      right: 10px;
       font-size: 12px;
       background: #000;
       padding: 6px 10px;
       border-radius: 6px;
-      opacity: 0.7;
-      white-space: pre;
+      opacity: 0.85;
+      white-space: pre-wrap;
+      max-height: 160px;
+      overflow-y: auto;
     }
   </style>
 </head>
@@ -96,19 +99,19 @@
 
   <div>
     <h1 style="text-align:center;">Lobby</h1>
-    <div class="sous-titre" style="text-align:center;">Chaque joueur appuie sur le bouton de sa manette pour se déclarer prêt</div>
+    <div class="sous-titre" style="text-align:center;">Appuie sur n'importe quel bouton de ta manette pour te déclarer prêt (le 1er = Joueur 1, le 2e = Joueur 2)</div>
   </div>
 
   <div class="panels">
     <div class="panel" id="panel1">
       <div class="titre">Joueur 1</div>
-      <div class="bouton">Manette gauche — bouton 19</div>
+      <div class="bouton">1ère manette qui appuie</div>
       <div class="statut" id="statut1">En attente…</div>
       <div class="padid" id="padid1"></div>
     </div>
     <div class="panel" id="panel2">
       <div class="titre">Joueur 2</div>
-      <div class="bouton">Manette droite — bouton 21</div>
+      <div class="bouton">2e manette qui appuie</div>
       <div class="statut" id="statut2">En attente…</div>
       <div class="padid" id="padid2"></div>
     </div>
@@ -122,11 +125,8 @@
   // Nom du fichier de jeu vers lequel on redirige une fois les 2 joueurs prêts.
   const GAME_FILE = "jeu.html";
 
-  // Boutons utilisés pour se déclarer prêt (mêmes indices que les sauts en jeu).
-  const READY_BUTTON = { player1: 19, player2: 21 };
-
-  let player1Pad = null; // { index, id }
-  let player2Pad = null; // { index, id }
+  let player1Pad = null; // { index, id, button }
+  let player2Pad = null; // { index, id, button }
   let redirecting = false;
 
   const panel1 = document.getElementById('panel1');
@@ -138,17 +138,18 @@
   const countdownEl = document.getElementById('countdown');
   const debugEl = document.getElementById('debug');
 
-  function markReady(playerNum, index, id){
+  function markReady(playerNum, index, id, buttonIndex){
+    const info = id + '\n(bouton ' + buttonIndex + ')';
     if(playerNum === 1){
-      player1Pad = { index, id };
+      player1Pad = { index, id, button: buttonIndex };
       panel1.classList.add('ready');
       statut1.textContent = 'PRÊT ✓';
-      padid1.textContent = id;
+      padid1.textContent = info;
     } else {
-      player2Pad = { index, id };
+      player2Pad = { index, id, button: buttonIndex };
       panel2.classList.add('ready');
       statut2.textContent = 'PRÊT ✓';
-      padid2.textContent = id;
+      padid2.textContent = info;
     }
   }
 
