@@ -286,6 +286,7 @@
     allPads.forEach((pad, index) => {
       if (!pad) return;
       if (index === MANUAL_PAD.player1 || index === MANUAL_PAD.player2) return;
+      if (index === player1Pad || index === player2Pad) return; // ne pas réutiliser une manette déjà assignée
       const side = detectSide(pad);
       if (side === 'L' && lIndex === null) lIndex = index;
       else if (side === 'R' && rIndex === null) rIndex = index;
