@@ -119,17 +119,20 @@
   function create(){
     this.add.image(400,300,'sky');
     scoreText1 = this.add.text(16,16,'Joueur 1: 0',{fontSize:'28px',fill:'#000'});
-    scoreText2 = this.add.text(584,16,'Joueur 2: 0',{fontSize:'28px',fill:'#000'});
+    scoreText2 = this.add.text(784, 16, 'Joueur 2: 0', {
+    fontSize: '28px',
+    fill: '#000'
+    }).setOrigin(1, 0);
 
     scoreEffect1 = this.add.text(16, 50, '', {
     fontSize: '24px',
     fill: '#ff0000'
     });
 
-    scoreEffect2 = this.add.text(584, 50, '', {
+    scoreEffect2 = this.add.text(784, 50, '', {
     fontSize: '24px',
     fill: '#ff0000'
-    });
+    }).setOrigin(1, 0);
 
     joinText = this.add.text(400, 300, 'Joueur 1 : appuie sur un bouton pour rejoindre', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
     joinText.setDepth(1000);
