@@ -68,10 +68,18 @@
 
   // Le stick de chaque manette est sur l'axe 0. invertX: passe à true si ce
   // joueur part dans le mauvais sens quand tu pousses le stick.
+  // axisX: une Joy-Con tenue à l'horizontale renvoie souvent son stick sur
+  // l'axe 1 (vertical) plutôt que 0, ce qui donne l'effet "tourné de 90°".
   var CONTROLS = {
-    player1: { axisX: 0, invertX: false },
-    player2: { axisX: 0, invertX: false }
+    player1: { axisX: 1, invertX: false },
+    player2: { axisX: 1, invertX: false }
   };
+
+  // Repli manuel : si un joueur ne bouge pas du tout, regarde le texte de
+  // debug en bas de l'écran (il affiche maintenant l'id de chaque Pad).
+  // Mets ici le numéro de Pad correspondant pour forcer l'assignation.
+  // Laisse à null pour garder la détection automatique.
+  var MANUAL_PAD = { player1: null, player2: null };
 
   var player1Pad = null, player2Pad = null;
 
@@ -165,7 +173,7 @@
         if(!pad) return;
         let axesStr = pad.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
         let btnsStr = pad.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
-        debug += 'Pad'+index+' axes['+axesStr+'] btns['+btnsStr+']\n';
+        debug += 'Pad'+index+' id="'+pad.id+'"\n  axes['+axesStr+'] btns['+btnsStr+']\n';
       });
       debugText.setText(debug);
       // ==== FIN DEBUG ====
@@ -187,22 +195,32 @@
   // via l'id (Joy-Con (L) = joueur 1, (R) = joueur 2) ; les manettes non
   // reconnues sont assignées dans l'ordre aux emplacements restants.
   function assignPads(allPads){
+    // Repli manuel prioritaire si configuré
+    if(MANUAL_PAD.player1 !== null) player1Pad = MANUAL_PAD.player1;
+    if(MANUAL_PAD.player2 !== null) player2Pad = MANUAL_PAD.player2;
+    if(MANUAL_PAD.player1 !== null && MANUAL_PAD.player2 !== null) return;
+
     let lIndex = null, rIndex = null;
     const others = [];
 
     allPads.forEach((pad, index) => {
       if(!pad) return;
+      if(index === MANUAL_PAD.player1 || index === MANUAL_PAD.player2) return;
       const side = detectSide(pad);
       if(side === 'L' && lIndex === null) lIndex = index;
       else if(side === 'R' && rIndex === null) rIndex = index;
       else others.push(index);
     });
 
-    if(lIndex !== null) player1Pad = lIndex;
-    else if(player1Pad === null && others.length) player1Pad = others.shift();
+    if(MANUAL_PAD.player1 === null){
+      if(lIndex !== null) player1Pad = lIndex;
+      else if(player1Pad === null && others.length) player1Pad = others.shift();
+    }
 
-    if(rIndex !== null) player2Pad = rIndex;
-    else if(player2Pad === null && others.length) player2Pad = others.shift();
+    if(MANUAL_PAD.player2 === null){
+      if(rIndex !== null) player2Pad = rIndex;
+      else if(player2Pad === null && others.length) player2Pad = others.shift();
+    }
   }
 
   // Essaie de détecter si une manette est une Joy-Con (L) ou (R) via son id.
