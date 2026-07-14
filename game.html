@@ -51,37 +51,32 @@
   let playerNickname = localStorage.getItem("playerNickname") || "player";
 
   // ==== Variables globales ====
-  var player1, player2, cursors, stars, bombs, platforms, debugText;
+  var player1, player2, cursors, stars, bombs, platforms, joinText, debugText;
   var score1 = 0, score2 = 0, scoreText1, scoreText2;
   var gameOver = false;
   var currentLevel = 0;
   var platformsArray = [];
   var tremplin = null;
 
-  // ==== Configuration des manettes séparées ====
-  // Manette 1 (joueur 1) : saut = bouton 19
-  // Manette 2 (joueur 2) : saut = bouton 21
-  var JUMP_BUTTONS = {
-    player1: [19],
-    player2: [21]
-  };
+  // ==== Configuration fixe des manettes (à ajuster ici directement) ====
+  var JUMP_BUTTON = { player1: 12, player2: 2 };
+  var axisBaseline = {}; // par index de manette, valeurs de repos de chaque axe
 
-  // Le stick de chaque manette est sur l'axe 0. invertX: passe à true si ce
-  // joueur part dans le mauvais sens quand tu pousses le stick.
-  // axisX: une Joy-Con tenue à l'horizontale renvoie souvent son stick sur
-  // l'axe 1 (vertical) plutôt que 0, ce qui donne l'effet "tourné de 90°".
+  // ==== Réglages manuels si un joueur ne bouge pas ou va dans le mauvais sens ====
+  // invertX: passe à true si ce joueur part dans le mauvais sens.
+  // forcedAxis: laisse à null pour une détection automatique. Si un joueur ne
+  // bouge pas du tout, regarde le texte de debug en bas de l'écran (ex:
+  // "Pad0 axes[0:0.00 1:0.00 2:-1.00 3:0.30]"), pousse le stick à gauche/droite
+  // et repère quel numéro d'axe change. Mets ce numéro ici (ex: 3).
   var CONTROLS = {
-    player1: { axisX: 1, invertX: false },
-    player2: { axisX: 1, invertX: false }
+    player1: { invertX: false, forcedAxis: null },
+    player2: { invertX: false, forcedAxis: null }
   };
 
-  // Repli manuel : si un joueur ne bouge pas du tout, regarde le texte de
-  // debug en bas de l'écran (il affiche maintenant l'id de chaque Pad).
-  // Mets ici le numéro de Pad correspondant pour forcer l'assignation.
-  // Laisse à null pour garder la détection automatique.
-  var MANUAL_PAD = { player1: null, player2: null };
-
+  var joinScreen = true;
+  var joinStage = 'p1assign';
   var player1Pad = null, player2Pad = null;
+  var prevButtons = {};
 
   // ==== Layout des niveaux ====
   var platformLayouts = [
@@ -124,6 +119,9 @@
     this.add.image(400,300,'sky');
     scoreText1 = this.add.text(16,16,'Joueur 1: 0',{fontSize:'28px',fill:'#000'});
     scoreText2 = this.add.text(584,16,'Joueur 2: 0',{fontSize:'28px',fill:'#000'});
+
+    joinText = this.add.text(400, 300, 'Joueur 1 : appuie sur un bouton pour rejoindre', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
+    joinText.setDepth(1000);
 
     debugText = this.add.text(16, 500, '', {fontSize:'16px', fill:'#fff', backgroundColor:'#000', padding:{x:8,y:4}});
     debugText.setDepth(1000);
@@ -168,81 +166,108 @@
       const allPads = gp ? gp.gamepads : [];
 
       // ==== DEBUG PERMANENT : état brut de toutes les manettes connectées ====
-      let debug = 'p1=' + player1Pad + ' p2=' + player2Pad + '\n';
+      let debug = 'Stage: ' + (joinScreen ? joinStage : 'en jeu') + '\n';
       allPads.forEach((pad, index) => {
         if(!pad) return;
         let axesStr = pad.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
         let btnsStr = pad.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
-        debug += 'Pad'+index+' id="'+pad.id+'"\n  axes['+axesStr+'] btns['+btnsStr+']\n';
+        debug += 'Pad'+index+' axes['+axesStr+'] btns['+btnsStr+']\n';
       });
       debugText.setText(debug);
       // ==== FIN DEBUG ====
 
-      assignPads(allPads);
+      if(joinScreen){
+        handleJoinScreen.call(this, allPads);
+        return;
+      }
 
       const pad1 = allPads[player1Pad];
       const pad2 = allPads[player2Pad];
 
-      movePlayer(player1, pad1, 'left1', 'turn1', 'right1', JUMP_BUTTONS.player1, CONTROLS.player1);
-      movePlayer(player2, pad2, 'left2', 'turn2', 'right2', JUMP_BUTTONS.player2, CONTROLS.player2);
+      movePlayer(player1, pad1, player1Pad, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1, CONTROLS.player1);
+      movePlayer(player2, pad2, player2Pad, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2, CONTROLS.player2);
     } catch(err) {
       debugText.setText('ERREUR: ' + err.message);
     }
   }
 
-  // Assigne automatiquement les manettes aux joueurs, à chaque frame (pour
-  // gérer les (re)connexions en cours de partie). Priorité à la détection
-  // via l'id (Joy-Con (L) = joueur 1, (R) = joueur 2) ; les manettes non
-  // reconnues sont assignées dans l'ordre aux emplacements restants.
-  function assignPads(allPads){
-    // Repli manuel prioritaire si configuré
-    if(MANUAL_PAD.player1 !== null) player1Pad = MANUAL_PAD.player1;
-    if(MANUAL_PAD.player2 !== null) player2Pad = MANUAL_PAD.player2;
-    if(MANUAL_PAD.player1 !== null && MANUAL_PAD.player2 !== null) return;
-
-    let lIndex = null, rIndex = null;
-    const others = [];
+  function handleJoinScreen(allPads){
+    let handledThisFrame = false;
 
     allPads.forEach((pad, index) => {
       if(!pad) return;
-      if(index === MANUAL_PAD.player1 || index === MANUAL_PAD.player2) return;
-      const side = detectSide(pad);
-      if(side === 'L' && lIndex === null) lIndex = index;
-      else if(side === 'R' && rIndex === null) rIndex = index;
-      else others.push(index);
+
+      pad.buttons.forEach((b, btnIndex) => {
+        const key = index + '_' + btnIndex;
+        const wasPressed = prevButtons[key] || false;
+        const justPressed = b.pressed && !wasPressed;
+        prevButtons[key] = b.pressed;
+
+        if(handledThisFrame || !justPressed) return;
+
+        if(joinStage === 'p1assign' && index !== player2Pad){
+          player1Pad = index;
+          joinStage = 'p2assign';
+          handledThisFrame = true;
+        } else if(joinStage === 'p2assign' && index !== player1Pad){
+          player2Pad = index;
+          joinStage = 'done';
+          joinScreen = false;
+          handledThisFrame = true;
+        }
+      });
     });
 
-    if(MANUAL_PAD.player1 === null){
-      if(lIndex !== null) player1Pad = lIndex;
-      else if(player1Pad === null && others.length) player1Pad = others.shift();
-    }
-
-    if(MANUAL_PAD.player2 === null){
-      if(rIndex !== null) player2Pad = rIndex;
-      else if(player2Pad === null && others.length) player2Pad = others.shift();
-    }
+    const messages = {
+      p1assign: 'Joueur 1 : appuie sur un bouton pour rejoindre',
+      p2assign: 'Joueur 2 : appuie sur un bouton pour rejoindre'
+    };
+    joinText.setText(messages[joinStage] || '');
+    if(joinStage === 'done') joinText.setText('');
   }
 
-  // Essaie de détecter si une manette est une Joy-Con (L) ou (R) via son id.
-  // Retourne 'L', 'R', ou null si on ne peut pas savoir.
-  function detectSide(pad){
-    if(!pad || !pad.id) return null;
-    const id = pad.id.toLowerCase();
-    if(id.includes('(l)') || id.includes('joy-con l') || id.includes('left')) return 'L';
-    if(id.includes('(r)') || id.includes('joy-con r') || id.includes('right')) return 'R';
-    return null;
-  }
-
-  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndices, controlConfig){
+  function movePlayer(player, pad, padIndex, leftAnim, turnAnim, rightAnim, jumpButtonIndex, controlConfig){
     if(!pad) return;
 
-    const deadzone = 0.25;
-    let moveX = pad.axes[controlConfig.axisX] ? pad.axes[controlConfig.axisX].value : 0;
-    if(controlConfig.invertX) moveX = -moveX;
-    if(Math.abs(moveX) < deadzone) moveX = 0;
+    // Première fois qu'on voit cette manette : on capture tout de suite la
+    // valeur "au repos" de chaque axe.
+    if(!axisBaseline[padIndex]){
+      axisBaseline[padIndex] = pad.axes.map(a => a.value);
+    }
 
-    // Filet de sécurité : si le stick ne bouge pas, on essaie la croix
-    // directionnelle via les boutons standards 14 (gauche) et 15 (droite).
+    const deadzone = 0.2;
+    const stillThreshold = 0.05; // en dessous, on considère que l'axe ne bouge pas
+    const recalSpeed = 0.02;     // vitesse de recalage doux du repère
+
+    let moveX = 0;
+
+    if(controlConfig.forcedAxis !== null && pad.axes[controlConfig.forcedAxis]){
+      // Axe imposé manuellement (voir CONTROLS en haut du fichier)
+      const i = controlConfig.forcedAxis;
+      const a = pad.axes[i];
+      const delta = a.value - axisBaseline[padIndex][i];
+      if(Math.abs(delta) < stillThreshold){
+        axisBaseline[padIndex][i] += (a.value - axisBaseline[padIndex][i]) * recalSpeed;
+      }
+      moveX = Math.abs(delta) > deadzone ? delta : 0;
+    } else {
+      // Détection automatique : on prend l'axe qui a le plus bougé depuis son repère
+      let maxAbsDelta = 0;
+      pad.axes.forEach((a, i) => {
+        const delta = a.value - axisBaseline[padIndex][i];
+        if(Math.abs(delta) < stillThreshold){
+          axisBaseline[padIndex][i] += (a.value - axisBaseline[padIndex][i]) * recalSpeed;
+        }
+        if(Math.abs(delta) > maxAbsDelta){ maxAbsDelta = Math.abs(delta); moveX = delta; }
+      });
+      if(maxAbsDelta <= deadzone) moveX = 0;
+    }
+
+    if(controlConfig.invertX) moveX = -moveX;
+
+    // Filet de sécurité : si aucun axe ne bouge (manette sans stick détecté),
+    // on essaie la croix directionnelle via les boutons standards 14 (gauche)
+    // et 15 (droite).
     if(moveX === 0 && pad.buttons[14] && pad.buttons[15]){
       if(pad.buttons[14].pressed) moveX = -1;
       else if(pad.buttons[15].pressed) moveX = 1;
@@ -259,8 +284,9 @@
       player.anims.play(turnAnim);
     }
 
-    const jumpPressed = jumpButtonIndices.some(i => pad.buttons[i] && pad.buttons[i].pressed);
-    if(jumpPressed && player.body.touching.down){
+    let anyButtonPressed = false;
+    pad.buttons.forEach(b => { if(b.pressed) anyButtonPressed = true; });
+    if(anyButtonPressed && player.body.touching.down){
       player.setVelocityY(-330);
     }
   }
