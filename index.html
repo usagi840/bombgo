@@ -274,42 +274,36 @@
     window.location.href = 'index.html';
   }
 
-  // ==== Détection des manettes (identique au jeu) ====
+  // ==== Détection des manettes ====
+  // Assignation simple et stable : la 1ère manette connectée (index le plus
+  // bas) devient joueur 1, la 2e devient joueur 2. Une fois assignée, une
+  // manette garde son joueur tant qu'elle reste connectée (pas de
+  // réassignation surprise en cours de route, pas d'heuristique L/R fragile
+  // qui ne marche que sur les Joy-Con).
   function assignPads(allPads) {
     if (MANUAL_PAD.player1 !== null) player1Pad = MANUAL_PAD.player1;
     if (MANUAL_PAD.player2 !== null) player2Pad = MANUAL_PAD.player2;
     if (MANUAL_PAD.player1 !== null && MANUAL_PAD.player2 !== null) return;
 
-    let lIndex = null, rIndex = null;
-    const others = [];
+    const connectedIndexes = [];
+    allPads.forEach((pad, index) => { if (pad) connectedIndexes.push(index); });
 
-    allPads.forEach((pad, index) => {
-      if (!pad) return;
-      if (index === MANUAL_PAD.player1 || index === MANUAL_PAD.player2) return;
-      if (index === player1Pad || index === player2Pad) return; // ne pas réutiliser une manette déjà assignée
-      const side = detectSide(pad);
-      if (side === 'L' && lIndex === null) lIndex = index;
-      else if (side === 'R' && rIndex === null) rIndex = index;
-      else others.push(index);
-    });
-
-    if (MANUAL_PAD.player1 === null) {
-      if (lIndex !== null) player1Pad = lIndex;
-      else if (player1Pad === null && others.length) player1Pad = others.shift();
+    // Si une manette assignée a été débranchée, on libère son slot
+    if (player1Pad !== null && MANUAL_PAD.player1 === null && !connectedIndexes.includes(player1Pad)) {
+      player1Pad = null;
+    }
+    if (player2Pad !== null && MANUAL_PAD.player2 === null && !connectedIndexes.includes(player2Pad)) {
+      player2Pad = null;
     }
 
-    if (MANUAL_PAD.player2 === null) {
-      if (rIndex !== null) player2Pad = rIndex;
-      else if (player2Pad === null && others.length) player2Pad = others.shift();
-    }
-  }
+    const available = connectedIndexes.filter(i => i !== player1Pad && i !== player2Pad);
 
-  function detectSide(pad) {
-    if (!pad || !pad.id) return null;
-    const id = pad.id.toLowerCase();
-    if (id.includes('(l)') || id.includes('joy-con l') || id.includes('left')) return 'L';
-    if (id.includes('(r)') || id.includes('joy-con r') || id.includes('right')) return 'R';
-    return null;
+    if (MANUAL_PAD.player1 === null && player1Pad === null && available.length) {
+      player1Pad = available.shift();
+    }
+    if (MANUAL_PAD.player2 === null && player2Pad === null && available.length) {
+      player2Pad = available.shift();
+    }
   }
 </script>
 </body>
