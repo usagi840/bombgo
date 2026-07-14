@@ -2,15 +2,10 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>2 Joueurs</title>
-  <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
+  <title>Choix des personnages</title>
 
   <!-- Phaser -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
-
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
   <style>
     body {
@@ -22,325 +17,301 @@
       height: 100vh;
     }
     canvas { border: 4px solid #291515; }
-
-    /* Les icônes en haut */
-    .icon { cursor:pointer; width:105px; position:fixed; top:10px; z-index:10; }
-    .icon.home { left:10px; }
-    .icon.retour { left:125px; }
-    .icon.refresh { right:10px; }
-
-    /* Statut des manettes (debug / aide au branchement) */
-    #padStatus {
-      position:fixed; bottom:6px; left:6px;
-      font-family: monospace; font-size:12px; color:#fff;
-      background:rgba(0,0,0,0.5); padding:4px 8px; border-radius:6px;
-      z-index:10; pointer-events:none;
-    }
   </style>
 </head>
 <body>
 
-  <img src="assets/logohome.png" class="icon home" onclick="window.location.href='./index.html'">
-  <img src="assets/logoretour.png" class="icon retour" onclick="window.location.href='./index.html'">
-  <img src="assets/logorefresh.png" class="icon refresh" onclick="window.location.href='./solo2p.html'">
-
-  <div id="padStatus">Manettes : en attente...</div>
-
-  <div id="game-wrapper"></div>
-
 <script>
-  // ==== Firebase ====
-  firebase.initializeApp({
-    apiKey: "AIzaSyBnQb5b5h62Jl4WeiKEBMeEmivbOK-B70k",
-    authDomain: "bombgo-classement.firebaseapp.com",
-    projectId: "bombgo-classement",
-    appId: "1:113313571513:web:73863b02df8193606ef168"
-  });
-  const db = firebase.firestore();
+  // ==== Personnages disponibles ====
+  var CHAR_KEYS = ['perso1', 'perso2', 'perso3'];
+  var BIG_CHAR_KEYS = ['persobig1', 'persobig2', 'persobig3'];
 
-  // ==== Variables globales ====
-  var cursors, stars, bombs, platforms;
-  var currentLevel = 0;
-  var platformsArray = [];
+  // ==== Config manettes (identique au jeu, à ajuster pareil si besoin) ====
+  var JUMP_BUTTONS = {
+    player1: [19], // bouton SR pour valider / joueur 1
+    player2: [21]  // bouton SR pour valider / joueur 2
+  };
 
-  var p1, p2;                 // sprites des 2 joueurs
-  var score1 = 0, score2 = 0;
-  var score1Text, score2Text;
+  var CONTROLS = {
+    player1: { axisNav: 0, invertNav: true }, // axe utilisé pour naviguer haut/bas
+    player2: { axisNav: 0, invertNav: true }
+  };
 
-  // ==== Config manettes (Joy-Con L / R) ====
-  // Deux cas de figure possibles selon comment les Joy-Con sont appairés :
-  //
-  // CAS A - Joy-Con connectés SÉPARÉMENT (2 entrées dans navigator.getGamepads()) :
-  //   pad[0] = un Joy-Con, pad[1] = l'autre. Chacun a son propre stick sur axes[0]/[1].
-  //
-  // CAS B - Joy-Con appairés ENSEMBLE comme une seule manette (fréquent sous
-  //   Windows/Bluetooth) : une SEULE entrée dans navigator.getGamepads(), mais
-  //   avec le mapping "standard" habituel d'une manette Xbox-like :
-  //     - Joy-Con GAUCHE  -> axes[0]/[1] (stick gauche), croix directionnelle
-  //       (boutons 12-15), boutons L/ZL (4/6)
-  //     - Joy-Con DROIT   -> axes[2]/[3] (stick droit), boutons A/B/X/Y (0-3),
-  //       boutons R/ZR (5/7)
-  //   On détecte ce cas et on répartit automatiquement les 2 joueurs dessus.
-  //
-  // Astuce debug : appuie sur "P" en jeu pour afficher dans la console (F12)
-  // l'état brut des manettes détectées, si jamais il faut ajuster des index.
-  const STICK_THRESHOLD = 0.35;
+  var player1Pad = null, player2Pad = null;
+  var prevAxisDir = { player1: 0, player2: 0 };
+  var prevJump = { player1: false, player2: false };
+  var prevButtonsJoin = {}; // clé padIndex_btnIndex -> était pressé ou non
 
-  function readStick(pad, axisIndex){
-    if(!pad.axes || pad.axes.length <= axisIndex) return {left:false,right:false};
-    const v = pad.axes[axisIndex];
-    return { left: v < -STICK_THRESHOLD, right: v > STICK_THRESHOLD };
-  }
-  function readButtons(pad, indices){
-    if(!pad.buttons) return false;
-    return indices.some(i => pad.buttons[i] && pad.buttons[i].pressed);
-  }
+  // Position des miniatures (bord) et du grand portrait pour chaque côté.
+  // Joueur 1 : miniatures collées au bord gauche, portrait vers le centre.
+  // Joueur 2 : miroir, miniatures collées au bord droit.
+  var LAYOUT = {
+    player1: { thumbX: 65, bigX: 270, titleX: 200, side: 1 },
+    player2: { thumbX: 735, bigX: 530, titleX: 600, side: -1 }
+  };
 
-  function getPlayerInputs(){
-    const rawPads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const pads = Array.from(rawPads).filter(p => p && p.connected);
-
-    let p1 = null, p2 = null;
-
-    if(pads.length >= 2){
-      // CAS A : deux manettes séparées
-      const s1 = readStick(pads[0], 0);
-      p1 = {
-        left: s1.left || readButtons(pads[0], [14]),
-        right: s1.right || readButtons(pads[0], [15]),
-        jump: readButtons(pads[0], [0,1,2,3,4,5,6,7])
-      };
-      const s2 = readStick(pads[1], 0);
-      p2 = {
-        left: s2.left || readButtons(pads[1], [14]),
-        right: s2.right || readButtons(pads[1], [15]),
-        jump: readButtons(pads[1], [0,1,2,3,4,5,6,7])
-      };
-    } else if(pads.length === 1){
-      // CAS B : une seule manette combinée (Joy-Con gauche + droit fusionnés)
-      const pad = pads[0];
-      const sLeft = readStick(pad, 0);   // stick du Joy-Con gauche
-      p1 = {
-        left: sLeft.left || readButtons(pad, [14]),   // dpad left
-        right: sLeft.right || readButtons(pad, [15]),  // dpad right
-        jump: readButtons(pad, [4,6,8])                // L, ZL, minus
-      };
-      const sRight = readStick(pad, 2);  // stick du Joy-Con droit
-      p2 = {
-        left: sRight.left,
-        right: sRight.right,
-        jump: readButtons(pad, [0,1,2,3,5,7,9])        // A/B/X/Y, R, ZR, plus
-      };
-    }
-
-    return { p1, p2 };
-  }
-
-  window.addEventListener("gamepadconnected", (e) => {
-    console.log("Manette connectée:", e.gamepad.index, e.gamepad.id);
-    updatePadStatus();
-  });
-  window.addEventListener("gamepaddisconnected", (e) => {
-    console.log("Manette déconnectée:", e.gamepad.index, e.gamepad.id);
-    updatePadStatus();
-  });
-  function updatePadStatus(){
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const names = [];
-    for(let i=0;i<pads.length;i++){
-      if(pads[i]) names.push(`P${i+1}: ${pads[i].id}`);
-    }
-    document.getElementById('padStatus').textContent =
-      names.length ? names.join(' | ') : "Manettes : en attente... (clavier: P1=flèches, P2=ZQSD)";
-  }
-
-  // ==== Layout des niveaux ====
-  var platformLayouts = [
-    [{x:600,y:400},{x:50,y:250},{x:750,y:220}],
-    [{x:150,y:350},{x:400,y:200},{x:650,y:300},{x:400,y:470}],
-    [{x:700,y:250},{x:80,y:150},{x:500,y:400}],
-    [{x:300,y:420},{x:40,y:200},{x:650,y:120},{x:400,y:300}],
-    [{x:200,y:380},{x:40,y:140},{x:600,y:240},{x:350,y:100}],
-    [{x:200,y:150},{x:500,y:310},{x:700,y:180},{x:350,y:460}],
-    [{x:100,y:380},{x:300,y:250},{x:500,y:150},{x:700,y:250}],
-    [{x:50,y:380},{x:250,y:200},{x:450,y:100},{x:650,y:200}],
-    [{x:400,y:380},{x:200,y:250},{x:600,y:150}],
-    [{x:100,y:500},{x:300,y:350},{x:500,y:200},{x:700,y:100}]
-  ];
-
-  // ==== Config Phaser ====
   var config = {
     type: Phaser.AUTO,
     width: 800,
     height: 600,
-    physics: { default: 'arcade', arcade: { gravity:{y:300}, debug:false } },
+    backgroundColor: '#413d3d',
+    input: { gamepad: true },
     scene: { preload, create, update }
   };
   new Phaser.Game(config);
 
-  var dude2LoadFailed = false;
+  // phase: 'connect' -> 'select' -> (ready true/false géré à part)
+  var state = {
+    player1: { phase: 'connect', selection: 0, ready: false },
+    player2: { phase: 'connect', selection: 0, ready: false }
+  };
 
-  function preload(){
-    this.load.image('sky','assets/sky.png');
-    this.load.image('ground','assets/platform.png');
-    this.load.image('star','assets/piece.png');
-    this.load.image('bomb','assets/bombe.png');
-    this.load.image('tremplin','assets/tremplin.png');
+  var slotBoxes = { player1: [], player2: [] };
+  var slotGlows = { player1: [], player2: [] };
+  var slotImages = { player1: [], player2: [] };
+  var bigImages = { player1: null, player2: null };
+  var readyTexts = { player1: null, player2: null };
+  var connectTexts = { player1: null, player2: null };
+  var skyImages = { player1: null, player2: null };
+  var startText, debugText;
 
-    // Personnage joueur 1 : celui choisi dans le menu
-    const char1 = localStorage.getItem('selectedCharacter') || '1';
-    this.load.spritesheet('dude1',`assets/personnageframe${char1}.png`,{frameWidth:320, frameHeight:480});
+  function preload() {
+    this.load.image('sky', 'assets/sky.png');
+    this.load.image('perso1', 'assets/perso1.png');
+    this.load.image('perso2', 'assets/perso2.png');
+    this.load.image('perso3', 'assets/perso3.png');
+    this.load.image('persobig1', 'assets/persobig1.png');
+    this.load.image('persobig2', 'assets/persobig2.png');
+    this.load.image('persobig3', 'assets/persobig3.png');
+  }
 
-    // Personnage joueur 2 : un autre choisi (ou 2 par défaut, ou le même si un seul dispo)
-    let char2 = localStorage.getItem('selectedCharacter2') || (char1 === '2' ? '1' : '2');
-    this.load.spritesheet('dude2',`assets/personnageframe${char2}.png`,{frameWidth:320, frameHeight:480});
+  function create() {
+    // Fond "sky" par côté, masqué tant que ce joueur n'est pas connecté
+    skyImages.player1 = this.add.image(200, 300, 'sky').setDisplaySize(400, 600);
+    skyImages.player1.setDepth(-1);
+    skyImages.player1.setVisible(false);
 
-    // Si l'asset du joueur 2 n'existe pas / ne charge pas, on ne bloque pas
-    // le reste du jeu : on retiendra qu'il faut retomber sur le sprite du J1.
-    this.load.on('loaderror', (file) => {
-      console.warn('Asset introuvable, ignoré:', file.key, file.src);
-      if(file.key === 'dude2') dude2LoadFailed = true;
+    skyImages.player2 = this.add.image(600, 300, 'sky').setDisplaySize(400, 600);
+    skyImages.player2.setDepth(-1);
+    skyImages.player2.setVisible(false);
+
+    // Ligne centrale séparant les deux côtés
+    const divider = this.add.graphics();
+    divider.fillStyle(0x291515, 1);
+    divider.fillRect(398, 0, 4, 600);
+    divider.setDepth(500);
+
+    this.add.text(LAYOUT.player1.titleX, 30, 'JOUEUR 1', { fontSize: '28px', fontStyle: 'bold', fill: '#fff' }).setOrigin(0.5);
+    this.add.text(LAYOUT.player2.titleX, 30, 'JOUEUR 2', { fontSize: '28px', fontStyle: 'bold', fill: '#fff' }).setOrigin(0.5);
+
+    buildSide.call(this, 'player1');
+    buildSide.call(this, 'player2');
+
+    startText = this.add.text(400, 560, '', { fontSize: '22px', fontStyle: 'bold', fill: '#ffd700', align: 'center' }).setOrigin(0.5);
+
+    debugText = this.add.text(16, 500, '', { fontSize: '14px', fill: '#fff', backgroundColor: '#000', padding: { x: 8, y: 4 } });
+    debugText.setDepth(1000);
+  }
+
+  function buildSide(playerKey) {
+    const L = LAYOUT[playerKey];
+    const size = 72;
+    const gap = 18;
+    const startY = 140;
+
+    CHAR_KEYS.forEach((key, i) => {
+      const y = startY + i * (size + gap);
+
+      const glow = this.add.graphics();
+      slotGlows[playerKey].push(glow);
+
+      const box = this.add.graphics();
+      slotBoxes[playerKey].push(box);
+
+      const img = this.add.image(L.thumbX, y, key).setDisplaySize(48, 48);
+      slotImages[playerKey].push(img);
+    });
+
+    // Portrait géant du personnage sélectionné, aligné sur le bas comme
+    // dans l'image de référence, dépassant largement la hauteur des
+    // miniatures.
+    bigImages[playerKey] = this.add.image(L.bigX, 340, BIG_CHAR_KEYS[0]).setDisplaySize(280, 460);
+
+    readyTexts[playerKey] = this.add.text(L.thumbX, startY + 3 * (size + gap) + 14, '', {
+      fontSize: '18px', fontStyle: 'bold', fill: '#7CFC00', align: 'center'
+    }).setOrigin(0.5, 0);
+
+    connectTexts[playerKey] = this.add.text(L.titleX, 300,
+      (playerKey === 'player1' ? 'Joueur 1' : 'Joueur 2') + '\nappuie sur un bouton\npour te connecter',
+      { fontSize: '22px', fontStyle: 'bold', fill: '#fff', align: 'center' }
+    ).setOrigin(0.5);
+
+    drawSide.call(this, playerKey);
+  }
+
+  function drawSide(playerKey) {
+    const L = LAYOUT[playerKey];
+    const size = 72;
+    const gap = 18;
+    const startY = 140;
+    const s = state[playerKey];
+    const visible = s.phase !== 'connect';
+
+    CHAR_KEYS.forEach((key, i) => {
+      const y = startY + i * (size + gap);
+      const glow = slotGlows[playerKey][i];
+      const box = slotBoxes[playerKey][i];
+      const isSelected = s.selection === i;
+
+      slotImages[playerKey][i].setVisible(visible);
+
+      glow.clear();
+      box.clear();
+      if (!visible) return;
+
+      // Halo lumineux derrière la case sélectionnée (comme le contour
+      // blanc/flou de l'image de référence)
+      if (isSelected) {
+        const glowColor = s.ready ? 0x7CFC00 : 0xffffff;
+        glow.fillStyle(glowColor, 0.35);
+        glow.fillRoundedRect(L.thumbX - size / 2 - 10, y - size / 2 - 10, size + 20, size + 20, 12);
+        glow.fillStyle(glowColor, 0.55);
+        glow.fillRoundedRect(L.thumbX - size / 2 - 5, y - size / 2 - 5, size + 10, size + 10, 10);
+      }
+
+      box.fillStyle(0xffffff, 1);
+      box.fillRect(L.thumbX - size / 2, y - size / 2, size, size);
+
+      box.lineStyle(isSelected ? 4 : 2, isSelected ? (s.ready ? 0x7CFC00 : 0xffd700) : 0x000000, 1);
+      box.strokeRect(L.thumbX - size / 2, y - size / 2, size, size);
+    });
+
+    bigImages[playerKey].setVisible(visible);
+    bigImages[playerKey].setTexture(BIG_CHAR_KEYS[s.selection]);
+
+    readyTexts[playerKey].setText(visible && s.ready ? 'PRÊT ✓' : '');
+    connectTexts[playerKey].setVisible(!visible);
+  }
+
+  function update() {
+    try {
+      const gp = this.input.gamepad;
+      const allPads = gp ? gp.gamepads : [];
+
+      let debug = 'p1=' + player1Pad + ' p2=' + player2Pad + '\n';
+      allPads.forEach((pad, index) => {
+        if (!pad) return;
+        let axesStr = pad.axes.map((a, i) => i + ':' + a.value.toFixed(2)).join(' ');
+        debug += 'Pad' + index + ' id="' + pad.id + '"\n  axes[' + axesStr + ']\n';
+      });
+      debugText.setText(debug);
+
+      claimUnassignedPads(allPads);
+
+      const pad1 = allPads[player1Pad];
+      const pad2 = allPads[player2Pad];
+
+      handleSide.call(this, 'player1', pad1);
+      handleSide.call(this, 'player2', pad2);
+
+      if (state.player1.phase === 'select' && state.player1.ready &&
+          state.player2.phase === 'select' && state.player2.ready) {
+        startText.setText('Prêt à commencer !');
+        goToGameIfConfirmed(allPads);
+      } else {
+        startText.setText('');
+      }
+    } catch (err) {
+      debugText.setText('ERREUR: ' + err.message);
+    }
+  }
+
+  // N'importe quelle manette pas encore prise : le premier appui sur un
+  // bouton la réclame pour le joueur 1 (si libre), sinon pour le joueur 2.
+  // Indépendant de l'id/le nom de la manette, donc fiable pour 2 manettes
+  // quelconques.
+  function claimUnassignedPads(allPads) {
+    allPads.forEach((pad, index) => {
+      if (!pad) return;
+      if (index === player1Pad || index === player2Pad) return;
+
+      pad.buttons.forEach((b, btnIndex) => {
+        const key = index + '_' + btnIndex;
+        const wasPressed = prevButtonsJoin[key] || false;
+        const justPressed = b.pressed && !wasPressed;
+        prevButtonsJoin[key] = b.pressed;
+
+        if (!justPressed) return;
+
+        if (player1Pad === null) {
+          player1Pad = index;
+        } else if (player2Pad === null && index !== player1Pad) {
+          player2Pad = index;
+        }
+      });
     });
   }
 
-  function create(){
-    this.add.image(400,300,'sky');
+  function handleSide(playerKey, pad) {
+    const s = state[playerKey];
+    const L = LAYOUT[playerKey];
 
-    // Deux scores affichés côte à côte en haut
-    score1Text = this.add.text(16,16,'J1: 0',{fontSize:'32px',fill:'#2255ff'});
-    score2Text = this.add.text(650,16,'J2: 0',{fontSize:'32px',fill:'#ff3322'});
+    if (s.phase === 'connect') {
+      connectTexts[playerKey].setText(
+        pad
+          ? ((playerKey === 'player1' ? 'Joueur 1' : 'Joueur 2') + '\nappuie sur un bouton\npour te connecter')
+          : ((playerKey === 'player1' ? 'Joueur 1' : 'Joueur 2') + '\nen attente de connexion...')
+      );
+      if (!pad) return;
 
-    // ---- Éléments essentiels du monde d'abord : même si un sprite
-    // personnage a un souci, les pièces/plateformes/bombes existeront. ----
-    platforms = this.physics.add.staticGroup();
-    platforms.create(400,568,'ground').setScale(2).refreshBody();
-    createPlatformsForLevel(currentLevel);
-
-    stars = this.physics.add.group({key:'star', repeat:11, setXY:{x:12,y:0,stepX:70}});
-    stars.children.iterate(c => { c.setBounceY(Phaser.Math.FloatBetween(0.4,0.8)); c.setScale(0.015); });
-
-    bombs = this.physics.add.group();
-
-    // ---- Joueur 1 ----
-    p1 = this.physics.add.sprite(100,450,'dude1').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
-    this.anims.create({key:'left1', frames:this.anims.generateFrameNumbers('dude1',{start:0,end:3}), frameRate:10, repeat:-1});
-    this.anims.create({key:'turn1', frames:[{key:'dude1',frame:4}], frameRate:20});
-    this.anims.create({key:'right1', frames:this.anims.generateFrameNumbers('dude1',{start:5,end:8}), frameRate:10, repeat:-1});
-
-    // ---- Joueur 2 : si son sprite dédié n'a pas chargé, on réutilise
-    // celui du joueur 1 (teinté en rouge pour le distinguer) plutôt que
-    // de laisser une texture cassée planter le reste du jeu. ----
-    const dude2Ready = this.textures.exists('dude2') && !dude2LoadFailed;
-    const p2Texture = dude2Ready ? 'dude2' : 'dude1';
-
-    p2 = this.physics.add.sprite(700,450,p2Texture).setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
-
-    if(dude2Ready){
-      this.anims.create({key:'left2', frames:this.anims.generateFrameNumbers('dude2',{start:0,end:3}), frameRate:10, repeat:-1});
-      this.anims.create({key:'turn2', frames:[{key:'dude2',frame:4}], frameRate:20});
-      this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude2',{start:5,end:8}), frameRate:10, repeat:-1});
-    } else {
-      // Réutilise les animations du joueur 1 (même texture 'dude1')
-      p2.setTexture('dude1');
-      p2.setTint(0xff6666);
-      this.anims.create({key:'left2', frames:this.anims.generateFrameNumbers('dude1',{start:0,end:3}), frameRate:10, repeat:-1});
-      this.anims.create({key:'turn2', frames:[{key:'dude1',frame:4}], frameRate:20});
-      this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude1',{start:5,end:8}), frameRate:10, repeat:-1});
+      // La manette vient d'être réclamée par claimUnassignedPads() : on
+      // passe ce joueur (et uniquement lui) à l'écran de sélection.
+      s.phase = 'select';
+      skyImages[playerKey].setVisible(true);
+      drawSide.call(this, playerKey);
+      return;
     }
 
-    cursors = this.input.keyboard.createCursorKeys();
-    // Clavier secours joueur 2 : Z Q S D (ZQSD/AZERTY) -> gauche=Q, droite=D, saut=Z
-    this.keysP2 = this.input.keyboard.addKeys({left:'Q', right:'D', up:'Z'});
+    // phase === 'select'
+    if (!pad) return;
+    const control = CONTROLS[playerKey];
 
-    // Debug manette : touche P
-    this.input.keyboard.on('keydown-P', () => {
-      console.log('État manettes:', navigator.getGamepads());
-    });
+    if (!s.ready) {
+      const deadzone = 0.5;
+      let axisVal = pad.axes[control.axisNav] ? pad.axes[control.axisNav].value : 0;
+      if (control.invertNav) axisVal = -axisVal;
 
-    this.physics.add.collider(p1, platforms);
-    this.physics.add.collider(p2, platforms);
-    this.physics.add.collider(p1, p2); // les 2 joueurs se bousculent
-    this.physics.add.collider(stars, platforms);
-    this.physics.add.collider(bombs, platforms);
+      let dir = 0;
+      if (axisVal < -deadzone) dir = -1;
+      else if (axisVal > deadzone) dir = 1;
 
-    this.physics.add.overlap(p1, stars, (pl, star) => collectStar(pl, star, 1), null, this);
-    this.physics.add.overlap(p2, stars, (pl, star) => collectStar(pl, star, 2), null, this);
-
-    this.physics.add.collider(p1, bombs, (pl, bomb) => hitBomb(pl, bomb, 1), null, this);
-    this.physics.add.collider(p2, bombs, (pl, bomb) => hitBomb(pl, bomb, 2), null, this);
-
-    updatePadStatus();
-  }
-
-  function update(){
-    const { p1: pad1, p2: pad2 } = getPlayerInputs();
-
-    // Joueur 1 : manette (Joy-Con gauche, seul ou fusionné), sinon flèches clavier
-    handlePlayerMovement(p1, 1, {
-      left: pad1 ? pad1.left : cursors.left.isDown,
-      right: pad1 ? pad1.right : cursors.right.isDown,
-      jump: pad1 ? pad1.jump : cursors.up.isDown
-    });
-
-    // Joueur 2 : manette (Joy-Con droit, seul ou fusionné), sinon ZQSD clavier
-    handlePlayerMovement(p2, 2, {
-      left: pad2 ? pad2.left : this.keysP2.left.isDown,
-      right: pad2 ? pad2.right : this.keysP2.right.isDown,
-      jump: pad2 ? pad2.jump : this.keysP2.up.isDown
-    });
-  }
-
-  function handlePlayerMovement(sprite, num, input){
-    if(input.left){ sprite.setVelocityX(-160); sprite.anims.play('left'+num, true); }
-    else if(input.right){ sprite.setVelocityX(160); sprite.anims.play('right'+num, true); }
-    else { sprite.setVelocityX(0); sprite.anims.play('turn'+num); }
-    if(input.jump && sprite.body.touching.down) sprite.setVelocityY(-330);
-  }
-
-  function collectStar(playerSprite, star, num){
-    star.disableBody(true,true);
-    if(num === 1){ score1 += 10; score1Text.setText('J1: '+score1); }
-    else { score2 += 10; score2Text.setText('J2: '+score2); }
-
-    if(stars.countActive(true)===0){
-      changeLevel();
-      stars.children.iterate(c => c.enableBody(true,c.x,0,true,true));
-      let x = (playerSprite.x<400)?Phaser.Math.Between(400,800):Phaser.Math.Between(0,400);
-      let bomb = bombs.create(x,16,'bomb').setScale(0.015);
-      bomb.body.setSize(bomb.width*0.015, bomb.height*0.015);
-      bomb.body.setOffset(bomb.width*0.015, bomb.height*0.015);
-      bomb.setBounce(1).setCollideWorldBounds(true).setVelocity(Phaser.Math.Between(-200,200),20);
-    }
-  }
-
-  // Plus de vies : toucher une bombe fait perdre 5 points (min 0) et
-  // donne un flash rouge au joueur touché, puis la partie continue.
-  function hitBomb(playerSprite, bomb, num){
-    bomb.disableBody(true,true);
-
-    if(num === 1){
-      score1 = Math.max(0, score1 - 5);
-      score1Text.setText('J1: '+score1);
-    } else {
-      score2 = Math.max(0, score2 - 5);
-      score2Text.setText('J2: '+score2);
+      // On ne réagit qu'au moment où le stick passe en position (évite de
+      // défiler en continu tant que le stick reste poussé).
+      if (dir !== 0 && prevAxisDir[playerKey] === 0) {
+        s.selection = (s.selection + dir + CHAR_KEYS.length) % CHAR_KEYS.length;
+        drawSide.call(this, playerKey);
+      }
+      prevAxisDir[playerKey] = dir;
     }
 
-    playerSprite.setTint(0xff0000);
-    playerSprite.scene.time.delayedCall(300, () => playerSprite.clearTint());
+    const jumpPressed = JUMP_BUTTONS[playerKey].some(i => pad.buttons[i] && pad.buttons[i].pressed);
+    if (jumpPressed && !prevJump[playerKey]) {
+      s.ready = !s.ready; // appuyer confirme, ré-appuyer permet de changer d'avis
+      drawSide.call(this, playerKey);
+    }
+    prevJump[playerKey] = jumpPressed;
   }
 
-  function createPlatformsForLevel(level){
-    platformsArray.forEach(p=>p.destroy());
-    platformsArray=[];
-    platformLayouts[level].forEach(pos=>platformsArray.push(platforms.create(pos.x,pos.y,'ground')));
-  }
+  function goToGameIfConfirmed(allPads) {
+    // Une fois les deux joueurs prêts, n'importe quel appui supplémentaire
+    // lance la partie (évite un démarrage accidentel dès que ready passe à true).
+    const anyExtraPress = allPads.some(pad => pad && pad.buttons.some(b => b.pressed));
+    if (!anyExtraPress) return;
 
-  function changeLevel(){
-    currentLevel = (currentLevel+1)%platformLayouts.length;
-    createPlatformsForLevel(currentLevel);
+    localStorage.setItem('player1Skin', CHAR_KEYS[state.player1.selection]);
+    localStorage.setItem('player2Skin', CHAR_KEYS[state.player2.selection]);
+    window.location.href = 'index.html';
   }
-
 </script>
 </body>
 </html>
