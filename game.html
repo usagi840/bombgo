@@ -51,7 +51,7 @@
   let playerNickname = localStorage.getItem("playerNickname") || "player";
 
   // ==== Variables globales ====
-  var player1, player2, cursors, stars, bombs, platforms, joinText, debugText;
+  var player1, player2, cursors, stars, bombs, platforms, debugText;
   var score1 = 0, score2 = 0, scoreText1, scoreText2;
   var gameOver = false;
   var currentLevel = 0;
@@ -73,9 +73,7 @@
     player2: { axisX: 0, invertX: false }
   };
 
-  var joinScreen = true;
   var player1Pad = null, player2Pad = null;
-  var prevButtons = {};
 
   // ==== Layout des niveaux ====
   var platformLayouts = [
@@ -118,9 +116,6 @@
     this.add.image(400,300,'sky');
     scoreText1 = this.add.text(16,16,'Joueur 1: 0',{fontSize:'28px',fill:'#000'});
     scoreText2 = this.add.text(584,16,'Joueur 2: 0',{fontSize:'28px',fill:'#000'});
-
-    joinText = this.add.text(400, 300, 'Joueur 1 : appuie sur un bouton pour rejoindre', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
-    joinText.setDepth(1000);
 
     debugText = this.add.text(16, 500, '', {fontSize:'16px', fill:'#fff', backgroundColor:'#000', padding:{x:8,y:4}});
     debugText.setDepth(1000);
@@ -165,7 +160,7 @@
       const allPads = gp ? gp.gamepads : [];
 
       // ==== DEBUG PERMANENT : état brut de toutes les manettes connectées ====
-      let debug = 'Stage: ' + (joinScreen ? ('join p1=' + player1Pad + ' p2=' + player2Pad) : 'en jeu') + '\n';
+      let debug = 'p1=' + player1Pad + ' p2=' + player2Pad + '\n';
       allPads.forEach((pad, index) => {
         if(!pad) return;
         let axesStr = pad.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
@@ -175,10 +170,7 @@
       debugText.setText(debug);
       // ==== FIN DEBUG ====
 
-      if(joinScreen){
-        handleJoinScreen(allPads);
-        return;
-      }
+      assignPads(allPads);
 
       const pad1 = allPads[player1Pad];
       const pad2 = allPads[player2Pad];
@@ -190,55 +182,27 @@
     }
   }
 
-  function handleJoinScreen(allPads){
-    // 1) Détection automatique via le nom de la manette (Joy-Con (L) / (R))
+  // Assigne automatiquement les manettes aux joueurs, à chaque frame (pour
+  // gérer les (re)connexions en cours de partie). Priorité à la détection
+  // via l'id (Joy-Con (L) = joueur 1, (R) = joueur 2) ; les manettes non
+  // reconnues sont assignées dans l'ordre aux emplacements restants.
+  function assignPads(allPads){
+    let lIndex = null, rIndex = null;
+    const others = [];
+
     allPads.forEach((pad, index) => {
       if(!pad) return;
       const side = detectSide(pad);
-      if(side === 'L' && player1Pad === null && index !== player2Pad) player1Pad = index;
-      if(side === 'R' && player2Pad === null && index !== player1Pad) player2Pad = index;
+      if(side === 'L' && lIndex === null) lIndex = index;
+      else if(side === 'R' && rIndex === null) rIndex = index;
+      else others.push(index);
     });
 
-    // 2) Repli manuel : pour les manettes dont on n'a pas pu détecter le
-    // côté (id inconnu), on garde l'ancien système "appuie pour rejoindre"
-    let handledThisFrame = false;
-    allPads.forEach((pad, index) => {
-      if(!pad) return;
-      if(index === player1Pad || index === player2Pad) return; // déjà assignée
-      if(detectSide(pad) !== null) return; // sera gérée par la détection auto
+    if(lIndex !== null) player1Pad = lIndex;
+    else if(player1Pad === null && others.length) player1Pad = others.shift();
 
-      pad.buttons.forEach((b, btnIndex) => {
-        const key = index + '_' + btnIndex;
-        const wasPressed = prevButtons[key] || false;
-        const justPressed = b.pressed && !wasPressed;
-        prevButtons[key] = b.pressed;
-
-        if(handledThisFrame || !justPressed) return;
-
-        if(player1Pad === null){
-          player1Pad = index;
-          handledThisFrame = true;
-        } else if(player2Pad === null && index !== player1Pad){
-          player2Pad = index;
-          handledThisFrame = true;
-        }
-      });
-    });
-
-    // 3) Une fois les 2 joueurs assignés, il faut un appui pour démarrer
-    if(player1Pad !== null && player2Pad !== null){
-      joinText.setText('Manettes prêtes ! Appuie sur un bouton pour commencer');
-      const anyPressed = allPads.some(pad => pad && pad.buttons.some(b => b.pressed));
-      if(anyPressed){
-        joinScreen = false;
-        joinText.setText('');
-      }
-    } else {
-      let msg = '';
-      msg += player1Pad !== null ? 'Joueur 1 (manette L) : prêt ✓\n' : 'Joueur 1 (manette L) : en attente...\n';
-      msg += player2Pad !== null ? 'Joueur 2 (manette R) : prêt ✓' : 'Joueur 2 (manette R) : en attente...';
-      joinText.setText(msg);
-    }
+    if(rIndex !== null) player2Pad = rIndex;
+    else if(player2Pad === null && others.length) player2Pad = others.shift();
   }
 
   // Essaie de détecter si une manette est une Joy-Con (L) ou (R) via son id.
