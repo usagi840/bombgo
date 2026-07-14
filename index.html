@@ -123,9 +123,6 @@
     joinText = this.add.text(400, 300, 'Joueur 1 : appuie sur un bouton pour rejoindre', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
     joinText.setDepth(1000);
 
-    debugText = this.add.text(16, 500, '', {fontSize:'16px', fill:'#fff', backgroundColor:'#000', padding:{x:8,y:4}});
-    debugText.setDepth(1000);
-
     platforms = this.physics.add.staticGroup();
     platforms.create(400,568,'ground').setScale(2).refreshBody();
     createPlatformsForLevel(currentLevel);
@@ -165,17 +162,6 @@
       const gp = this.input.gamepad;
       const allPads = gp ? gp.gamepads : [];
 
-      // ==== DEBUG PERMANENT : état brut de toutes les manettes connectées ====
-      let debug = 'Stage: ' + (joinScreen ? joinStage : 'en jeu') + '\n';
-      allPads.forEach((pad, index) => {
-        if(!pad) return;
-        let axesStr = pad.axes.map((a,i)=>i+':'+a.value.toFixed(2)).join(' ');
-        let btnsStr = pad.buttons.map((b,i)=> b.pressed ? i+':ON' : '').filter(s=>s).join(' ');
-        debug += 'Pad'+index+' axes['+axesStr+'] btns['+btnsStr+']\n';
-      });
-      debugText.setText(debug);
-      // ==== FIN DEBUG ====
-
       if(joinScreen){
         handleJoinScreen.call(this, allPads);
         return;
@@ -187,7 +173,7 @@
       movePlayer(player1, pad1, player1Pad, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1, CONTROLS.player1);
       movePlayer(player2, pad2, player2Pad, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2, CONTROLS.player2);
     } catch(err) {
-      debugText.setText('ERREUR: ' + err.message);
+      console.error(err);
     }
   }
 
