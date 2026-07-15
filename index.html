@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Solo</title>
   <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
 
@@ -12,27 +13,164 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
+  <!-- QR code generator -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
   <style>
+    :root{
+      --bg: #413d3d;
+      --panel: #2b2828;
+      --border: #291515;
+      --accent: #e8b04b;
+      --accent-dim: #a97f2f;
+      --text: #f2ede3;
+      --text-dim: #b8b0a4;
+    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      background-color: #413d3d;
+      background-color: var(--bg);
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: var(--text);
     }
-    canvas { border: 4px solid #291515; }
+    canvas { border: 4px solid var(--border); }
 
-    /* Les icônes en haut */
-    .icon { cursor:pointer; width:105px; position:fixed; top:10px; }
-    .icon.home { left:10px; }
-    .icon.retour { left:125px; }
-    .icon.refresh { right:10px; }
+    #stage {
+      position: relative;
+      width: 800px;
+      height: 600px;
+    }
+
+    /* ==== Lobby overlay ==== */
+    #lobby {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      background: radial-gradient(circle at 50% 0%, #514a44 0%, var(--bg) 70%);
+      border: 4px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      padding: 24px;
+      text-align: center;
+    }
+    #lobby h1 {
+      margin: 0;
+      font-size: 34px;
+      letter-spacing: 6px;
+      font-weight: 800;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+    #lobby .subtitle {
+      margin: -12px 0 0 0;
+      color: var(--text-dim);
+      font-size: 14px;
+      letter-spacing: 1px;
+    }
+    #lobby-body {
+      display: flex;
+      align-items: center;
+      gap: 36px;
+    }
+    #qrcode {
+      background: #fff;
+      padding: 10px;
+      border-radius: 6px;
+      line-height: 0;
+    }
+    #room-code {
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: 10px;
+      color: var(--text);
+      background: var(--panel);
+      border: 2px solid var(--accent-dim);
+      border-radius: 8px;
+      padding: 8px 18px;
+      margin-top: 10px;
+    }
+    #room-code-label {
+      font-size: 12px;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    #qr-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #player-slots {
+      display: flex;
+      gap: 14px;
+    }
+    .slot {
+      width: 130px;
+      height: 84px;
+      border: 2px dashed #665f57;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      background: rgba(0,0,0,0.15);
+    }
+    .slot.filled {
+      border-style: solid;
+      border-color: var(--accent);
+      background: rgba(232,176,75,0.12);
+    }
+    .slot .num {
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+    .slot .name {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .slot.filled .name { color: var(--accent); }
+    .slot .empty-icon { font-size: 20px; opacity: 0.4; }
+
+    #lobby-hint {
+      font-size: 13px;
+      color: var(--text-dim);
+      max-width: 480px;
+    }
+
+    #game-wrapper { display: none; }
   </style>
 </head>
 <body>
 
-  <div id="game-wrapper"></div>
+  <div id="stage">
+    <div id="lobby">
+      <div>
+        <h1>Solo</h1>
+        <p class="subtitle">Scannez pour rejoindre la partie</p>
+      </div>
+      <div id="lobby-body">
+        <div id="qr-col">
+          <div id="qrcode"></div>
+          <div id="room-code-label">ou entrez le code</div>
+          <div id="room-code">----</div>
+        </div>
+        <div id="player-slots"></div>
+      </div>
+      <p id="lobby-hint">Le premier joueur à rejoindre pourra lancer la partie depuis son téléphone. 1 à 4 joueurs.</p>
+    </div>
+    <div id="game-wrapper"></div>
+  </div>
 
 <script>
   // ==== Firebase ====
@@ -44,40 +182,112 @@
   });
   const db = firebase.firestore();
 
-  // ==== Device ID pour score unique ====
-  let deviceId = localStorage.getItem("deviceId");
-  if(!deviceId){ deviceId = crypto.randomUUID(); localStorage.setItem("deviceId", deviceId); }
+  const MAX_PLAYERS = 4;
 
-  let playerNickname = localStorage.getItem("playerNickname") || "player";
+  // ==== Création de la salle ====
+  function makeRoomId(len = 4){
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sans O/0/I/1 ambigus
+    let id = "";
+    for(let i=0;i<len;i++) id += chars[Math.floor(Math.random()*chars.length)];
+    return id;
+  }
 
-  // ==== Variables globales ====
-  var player1, player2, cursors, stars, bombs, platforms, joinText, debugText;
-  var score1 = 0, score2 = 0, scoreText1, scoreText2;
+  let roomId = null;
+  let roomRef = null;
+  let playersUnsub = null;
+  let roomUnsub = null;
+  let latestPlayers = []; // triés par slot
+
+  async function createRoom(){
+    roomId = makeRoomId();
+    roomRef = db.collection("rooms").doc(roomId);
+    await roomRef.set({
+      createdAt: Date.now(),
+      started: false,
+      playerCount: 0,
+      maxPlayers: MAX_PLAYERS
+    });
+
+    document.getElementById('room-code').textContent = roomId;
+
+    const controllerUrl = new URL('controller.html', window.location.href);
+    controllerUrl.searchParams.set('room', roomId);
+
+    document.getElementById('qrcode').innerHTML = '';
+    new QRCode(document.getElementById('qrcode'), {
+      text: controllerUrl.toString(),
+      width: 176,
+      height: 176,
+      colorDark: "#291515",
+      colorLight: "#ffffff"
+    });
+
+    renderSlots([]);
+
+    playersUnsub = roomRef.collection('players').orderBy('slot').onSnapshot(snap => {
+      latestPlayers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderSlots(latestPlayers);
+    });
+
+    roomUnsub = roomRef.onSnapshot(doc => {
+      const data = doc.data();
+      if(data && data.started && !window.__gameLaunched){
+        window.__gameLaunched = true;
+        launchGame(latestPlayers);
+      }
+    });
+  }
+
+  function renderSlots(players){
+    const container = document.getElementById('player-slots');
+    container.innerHTML = '';
+    for(let i=1;i<=MAX_PLAYERS;i++){
+      const p = players.find(pl => pl.slot === i);
+      const div = document.createElement('div');
+      div.className = 'slot' + (p ? ' filled' : '');
+      if(p){
+        div.innerHTML = `<div class="num">JOUEUR ${i}${i===1?' · HÔTE':''}</div><div class="name">${escapeHtml(p.nickname || ('Joueur '+i))}</div>`;
+      } else {
+        div.innerHTML = `<div class="num">JOUEUR ${i}</div><div class="empty-icon">＋</div>`;
+      }
+      container.appendChild(div);
+    }
+  }
+
+  function escapeHtml(str){
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  createRoom();
+
+  // ============================================================
+  // ==================  JEU (lancé au démarrage)  ==============
+  // ============================================================
+
+  var player1, cursors, stars, bombs, platforms, debugText;
   var gameOver = false;
   var currentLevel = 0;
   var platformsArray = [];
-  var tremplin = null;
-  var scoreEffect1, scoreEffect2;
 
-  // ==== Configuration fixe des manettes (à ajuster ici directement) ====
-  var JUMP_BUTTON = { player1: 12, player2: 2 };
-  var axisBaseline = {}; // par index de manette, valeurs de repos de chaque axe
+  var activePlayers = [];      // [{slot, sprite, scoreText, deviceId, controlState:{moveX,jumpCount}, lastJumpCount}]
+  var controlUnsubs = [];
 
-  // ==== Réglages manuels si un joueur ne bouge pas ou va dans le mauvais sens ====
-  // invertX: passe à true si ce joueur part dans le mauvais sens.
-  // forcedAxis: laisse à null pour une détection automatique. Si un joueur ne
-  // bouge pas du tout, regarde le texte de debug en bas de l'écran (ex:
-  // "Pad0 axes[0:0.00 1:0.00 2:-1.00 3:0.30]"), pousse le stick à gauche/droite
-  // et repère quel numéro d'axe change. Mets ce numéro ici (ex: 3).
-  var CONTROLS = {
-    player1: { invertX: false, forcedAxis: null },
-    player2: { invertX: false, forcedAxis: null }
+  var SPAWN_POINTS = {
+    1: [ {x:400,y:450} ],
+    2: [ {x:150,y:450}, {x:650,y:450} ],
+    3: [ {x:120,y:450}, {x:400,y:450}, {x:680,y:450} ],
+    4: [ {x:100,y:450}, {x:320,y:450}, {x:480,y:450}, {x:700,y:450} ]
   };
 
-  var joinScreen = true;
-  var joinStage = 'p1assign';
-  var player1Pad = null, player2Pad = null;
-  var prevButtons = {};
+  // dude1/dude2 texture, avec une teinte pour différencier joueur 3 et 4
+  var PLAYER_VISUALS = [
+    { tex: 'dude1', tint: null },
+    { tex: 'dude2', tint: null },
+    { tex: 'dude1', tint: 0x88c8ff },
+    { tex: 'dude2', tint: 0xff9ecf }
+  ];
 
   // ==== Layout des niveaux ====
   var platformLayouts = [
@@ -93,16 +303,28 @@
     [{x:100,y:500},{x:300,y:350},{x:500,y:200},{x:700,y:100}]
   ];
 
-  // ==== Config Phaser ====
   var config = {
     type: Phaser.AUTO,
     width: 800,
     height: 600,
+    parent: 'game-wrapper',
     physics: { default: 'arcade', arcade: { gravity:{y:300}, debug:false } },
-    input: { gamepad: true },
     scene: { preload, create, update }
   };
-  new Phaser.Game(config);
+
+  var phaserGame = null;
+
+  function launchGame(players){
+    if(playersUnsub) playersUnsub();
+    if(roomUnsub) roomUnsub();
+    // on fige la liste des joueurs pour la partie
+    window.__players = players.slice(0, MAX_PLAYERS);
+
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('game-wrapper').style.display = 'block';
+
+    phaserGame = new Phaser.Game(config);
+  }
 
   function preload(){
     this.load.image('sky','assets/sky.png');
@@ -118,31 +340,10 @@
 
   function create(){
     this.add.image(400,300,'sky');
-    scoreText1 = this.add.text(16,16,'Joueur 1: 0',{fontSize:'28px',fill:'#000'});
-    scoreText2 = this.add.text(784, 16, 'Joueur 2: 0', {
-    fontSize: '28px',
-    fill: '#000'
-    }).setOrigin(1, 0);
-
-    scoreEffect1 = this.add.text(16, 50, '', {
-    fontSize: '24px',
-    fill: '#ff0000'
-    });
-
-    scoreEffect2 = this.add.text(784, 50, '', {
-    fontSize: '24px',
-    fill: '#ff0000'
-    }).setOrigin(1, 0);
-
-    joinText = this.add.text(400, 300, 'Joueur 1 : appuie sur un bouton pour rejoindre', {fontSize:'24px', fill:'#000', align:'center'}).setOrigin(0.5);
-    joinText.setDepth(1000);
 
     platforms = this.physics.add.staticGroup();
     platforms.create(400,568,'ground').setScale(2).refreshBody();
     createPlatformsForLevel(currentLevel);
-
-    player1 = this.physics.add.sprite(100, 450, 'dude1').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
-    player2 = this.physics.add.sprite(700, 450, 'dude2').setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
 
     this.anims.create({key:'left1', frames:this.anims.generateFrameNumbers('dude1',{start:0,end:3}), frameRate:10, repeat:-1});
     this.anims.create({key:'turn1', frames:[{key:'dude1',frame:4}], frameRate:20});
@@ -152,158 +353,112 @@
     this.anims.create({key:'turn2', frames:[{key:'dude2',frame:4}], frameRate:20});
     this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude2',{start:5,end:8}), frameRate:10, repeat:-1});
 
-    cursors = this.input.keyboard.createCursorKeys();
-
     stars = this.physics.add.group({key:'star', repeat:11, setXY:{x:12,y:0,stepX:70}});
     stars.children.iterate(c => { c.setBounceY(Phaser.Math.FloatBetween(0.4,0.8)); c.setScale(0.015); });
 
     bombs = this.physics.add.group();
 
-    this.physics.add.collider(player1, platforms);
-    this.physics.add.collider(player2, platforms);
+    // ==== création des joueurs actifs ====
+    const players = window.__players || [];
+    const count = Math.max(1, players.length);
+    const spawns = SPAWN_POINTS[count] || SPAWN_POINTS[4];
+
+    activePlayers = [];
+    players.forEach((p, idx) => {
+      const visual = PLAYER_VISUALS[idx % PLAYER_VISUALS.length];
+      const spawn = spawns[idx] || {x:400,y:450};
+      const animSuffix = visual.tex === 'dude1' ? '1' : '2';
+
+      const sprite = this.physics.add.sprite(spawn.x, spawn.y, visual.tex)
+        .setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
+      if(visual.tint) sprite.setTint(visual.tint);
+      sprite.setData('animSuffix', animSuffix);
+
+      const isLeft = idx % 2 === 0;
+      const row = Math.floor(idx / 2);
+      const scoreText = this.add.text(
+        isLeft ? 16 : 784,
+        16 + row * 34,
+        `${p.nickname || ('Joueur ' + p.slot)}: 0`,
+        { fontSize: '22px', fill: '#000' }
+      );
+      if(!isLeft) scoreText.setOrigin(1, 0);
+
+      const scoreEffect = this.add.text(
+        isLeft ? 16 : 784,
+        50 + row * 34,
+        '',
+        { fontSize: '18px', fill: '#ff0000' }
+      );
+      if(!isLeft) scoreEffect.setOrigin(1, 0);
+
+      const entry = {
+        slot: p.slot,
+        deviceId: p.id,
+        sprite,
+        scoreText,
+        scoreEffect,
+        score: 0,
+        control: { moveX: 0, jumpCount: 0 },
+        lastJumpCount: 0
+      };
+      activePlayers.push(entry);
+
+      this.physics.add.collider(sprite, platforms);
+      this.physics.add.collider(sprite, bombs, (pl, bomb) => hitBomb(entry, bomb), null, this);
+      this.physics.add.overlap(sprite, stars, (pl, star) => collectStar(entry, star), null, this);
+
+      // écoute Firestore de la manette de ce joueur
+      const unsub = roomRef.collection('players').doc(p.id).onSnapshot(doc => {
+        const data = doc.data();
+        if(!data) return;
+        entry.control.moveX = typeof data.moveX === 'number' ? data.moveX : 0;
+        entry.control.jumpCount = data.jumpCount || 0;
+      });
+      controlUnsubs.push(unsub);
+    });
+
     this.physics.add.collider(stars, platforms);
     this.physics.add.collider(bombs, platforms);
-    this.physics.add.overlap(player1, stars, collectStar, null, this);
-    this.physics.add.overlap(player2, stars, collectStar, null, this);
-    this.physics.add.collider(player1, bombs, hitBomb, null, this);
-    this.physics.add.collider(player2, bombs, hitBomb, null, this);
   }
 
   function update(){
     if(gameOver) return;
 
-    try {
-      const gp = this.input.gamepad;
-      const allPads = gp ? gp.gamepads : [];
+    activePlayers.forEach(entry => {
+      const { sprite, control } = entry;
+      const suffix = sprite.getData('animSuffix');
+      const moveX = control.moveX || 0;
 
-      if(joinScreen){
-        handleJoinScreen.call(this, allPads);
-        return;
+      if(moveX < -0.15){
+        sprite.setVelocityX(-160);
+        sprite.anims.play('left' + suffix, true);
+      } else if(moveX > 0.15){
+        sprite.setVelocityX(160);
+        sprite.anims.play('right' + suffix, true);
+      } else {
+        sprite.setVelocityX(0);
+        sprite.anims.play('turn' + suffix);
       }
 
-      const pad1 = allPads[player1Pad];
-      const pad2 = allPads[player2Pad];
-
-      movePlayer(player1, pad1, player1Pad, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1, CONTROLS.player1);
-      movePlayer(player2, pad2, player2Pad, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2, CONTROLS.player2);
-    } catch(err) {
-      console.error(err);
-    }
-  }
-
-  function handleJoinScreen(allPads){
-    let handledThisFrame = false;
-
-    allPads.forEach((pad, index) => {
-      if(!pad) return;
-
-      pad.buttons.forEach((b, btnIndex) => {
-        const key = index + '_' + btnIndex;
-        const wasPressed = prevButtons[key] || false;
-        const justPressed = b.pressed && !wasPressed;
-        prevButtons[key] = b.pressed;
-
-        if(handledThisFrame || !justPressed) return;
-
-        if(joinStage === 'p1assign' && index !== player2Pad){
-          player1Pad = index;
-          joinStage = 'p2assign';
-          handledThisFrame = true;
-        } else if(joinStage === 'p2assign' && index !== player1Pad){
-          player2Pad = index;
-          joinStage = 'done';
-          joinScreen = false;
-          handledThisFrame = true;
+      if(control.jumpCount !== entry.lastJumpCount){
+        entry.lastJumpCount = control.jumpCount;
+        if(sprite.body.touching.down){
+          sprite.setVelocityY(-330);
         }
-      });
+      }
     });
-
-    const messages = {
-      p1assign: 'Joueur 1 : appuie sur un bouton pour rejoindre',
-      p2assign: 'Joueur 2 : appuie sur un bouton pour rejoindre'
-    };
-    joinText.setText(messages[joinStage] || '');
-    if(joinStage === 'done') joinText.setText('');
   }
 
-  function movePlayer(player, pad, padIndex, leftAnim, turnAnim, rightAnim, jumpButtonIndex, controlConfig){
-    if(!pad) return;
-
-    // Première fois qu'on voit cette manette : on capture tout de suite la
-    // valeur "au repos" de chaque axe.
-    if(!axisBaseline[padIndex]){
-      axisBaseline[padIndex] = pad.axes.map(a => a.value);
-    }
-
-    const deadzone = 0.2;
-    const stillThreshold = 0.05; // en dessous, on considère que l'axe ne bouge pas
-    const recalSpeed = 0.02;     // vitesse de recalage doux du repère
-
-    let moveX = 0;
-
-    if(controlConfig.forcedAxis !== null && pad.axes[controlConfig.forcedAxis]){
-      // Axe imposé manuellement (voir CONTROLS en haut du fichier)
-      const i = controlConfig.forcedAxis;
-      const a = pad.axes[i];
-      const delta = a.value - axisBaseline[padIndex][i];
-      if(Math.abs(delta) < stillThreshold){
-        axisBaseline[padIndex][i] += (a.value - axisBaseline[padIndex][i]) * recalSpeed;
-      }
-      moveX = Math.abs(delta) > deadzone ? delta : 0;
-    } else {
-      // Détection automatique : on prend l'axe qui a le plus bougé depuis son repère
-      let maxAbsDelta = 0;
-      pad.axes.forEach((a, i) => {
-        const delta = a.value - axisBaseline[padIndex][i];
-        if(Math.abs(delta) < stillThreshold){
-          axisBaseline[padIndex][i] += (a.value - axisBaseline[padIndex][i]) * recalSpeed;
-        }
-        if(Math.abs(delta) > maxAbsDelta){ maxAbsDelta = Math.abs(delta); moveX = delta; }
-      });
-      if(maxAbsDelta <= deadzone) moveX = 0;
-    }
-
-    if(controlConfig.invertX) moveX = -moveX;
-
-    // Filet de sécurité : si aucun axe ne bouge (manette sans stick détecté),
-    // on essaie la croix directionnelle via les boutons standards 14 (gauche)
-    // et 15 (droite).
-    if(moveX === 0 && pad.buttons[14] && pad.buttons[15]){
-      if(pad.buttons[14].pressed) moveX = -1;
-      else if(pad.buttons[15].pressed) moveX = 1;
-    }
-
-    if(moveX < 0){
-      player.setVelocityX(-160);
-      player.anims.play(leftAnim, true);
-    } else if(moveX > 0){
-      player.setVelocityX(160);
-      player.anims.play(rightAnim, true);
-    } else {
-      player.setVelocityX(0);
-      player.anims.play(turnAnim);
-    }
-
-    let anyButtonPressed = false;
-    pad.buttons.forEach(b => { if(b.pressed) anyButtonPressed = true; });
-    if(anyButtonPressed && player.body.touching.down){
-      player.setVelocityY(-330);
-    }
-  }
-
-  function collectStar(player, star){
+  function collectStar(entry, star){
     star.disableBody(true,true);
-    if(player === player1){
-      score1 += 10;
-      scoreText1.setText('Joueur 1: '+score1);
-    } else {
-      score2 += 10;
-      scoreText2.setText('Joueur 2: '+score2);
-    }
+    entry.score += 10;
+    entry.scoreText.setText(`${entry.scoreText.text.split(':')[0]}: ${entry.score}`);
+
     if(stars.countActive(true)===0){
       changeLevel();
       stars.children.iterate(c => c.enableBody(true,c.x,0,true,true));
-      let x = (player.x<400)?Phaser.Math.Between(400,800):Phaser.Math.Between(0,400);
+      let x = (entry.sprite.x<400)?Phaser.Math.Between(400,800):Phaser.Math.Between(0,400);
       let bomb = bombs.create(x,16,'bomb').setScale(0.015);
       bomb.body.setSize(bomb.width*0.015, bomb.height*0.015);
       bomb.body.setOffset(bomb.width*0.015, bomb.height*0.015);
@@ -311,45 +466,12 @@
     }
   }
 
-  function hitBomb(player, bomb){
+  function hitBomb(entry, bomb){
     bomb.disableBody(true,true);
-
-    if(player === player1){
-        score1 = Math.max(0, score1 - 20);
-        scoreText1.setText('Joueur 1: ' + score1);
-
-        scoreEffect1.setText("-20");
-        setTimeout(() => scoreEffect1.setText(""), 1000);
-
-    } else {
-        score2 = Math.max(0, score2 - 20);
-        scoreText2.setText('Joueur 2: ' + score2);
-
-        scoreEffect2.setText("-20");
-        setTimeout(() => scoreEffect2.setText(""), 1000);
-    }
-}
-
-  function saveScore() {
-    const ref = db.collection("scores").doc(deviceId);
-
-    ref.get().then(doc => {
-      if (!doc.exists) {
-        ref.set({ pseudo: playerNickname, score: score, date: Date.now() });
-        console.log("Nouveau score créé !");
-        return;
-      }
-
-      const oldData = doc.data();
-
-      if (score > oldData.score) {
-        ref.set({ pseudo: playerNickname, score: score, date: Date.now() });
-        console.log("Score mis à jour !");
-      } else if (playerNickname !== oldData.pseudo) {
-        ref.update({ pseudo: playerNickname });
-        console.log("Pseudo mis à jour !");
-      }
-    }).catch(err => console.error("Erreur saveScore:", err));
+    entry.score = Math.max(0, entry.score - 20);
+    entry.scoreText.setText(`${entry.scoreText.text.split(':')[0]}: ${entry.score}`);
+    entry.scoreEffect.setText("-20");
+    setTimeout(() => entry.scoreEffect.setText(""), 1000);
   }
 
   function createPlatformsForLevel(level){
@@ -362,7 +484,6 @@
     currentLevel = (currentLevel+1)%platformLayouts.length;
     createPlatformsForLevel(currentLevel);
   }
-
 </script>
 </body>
 </html>
