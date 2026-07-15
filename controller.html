@@ -270,29 +270,34 @@
     document.getElementById('join-btn').disabled = true;
 
     try {
+      const myPlayerRef = roomRef.collection('players').doc(deviceId);
+
       await db.runTransaction(async (tx) => {
         const roomSnap = await tx.get(roomRef);
         if(!roomSnap.exists) throw new Error("Cette salle n'existe plus.");
         const roomData = roomSnap.data();
         if(roomData.started) throw new Error("La partie a déjà commencé.");
 
-        const playersSnap = await tx.get(roomRef.collection('players'));
-        if(playersSnap.docs.some(d => d.id === deviceId)) return; // déjà inscrit
+        const existingSnap = await tx.get(myPlayerRef);
+        if(existingSnap.exists){
+          mySlot = existingSnap.data().slot;
+          return; // déjà inscrit, on reprend sa place
+        }
 
-        const takenSlots = playersSnap.docs.map(d => d.data().slot);
-        if(takenSlots.length >= MAX_PLAYERS) throw new Error("La salle est complète (4 joueurs max).");
+        const currentCount = roomData.playerCount || 0;
+        if(currentCount >= MAX_PLAYERS) throw new Error("La salle est complète (4 joueurs max).");
 
-        let slot = 1;
-        while(takenSlots.includes(slot)) slot++;
+        const slot = currentCount + 1;
         mySlot = slot;
 
-        tx.set(roomRef.collection('players').doc(deviceId), {
+        tx.set(myPlayerRef, {
           slot,
           nickname,
           joinedAt: Date.now(),
           moveX: 0,
           jumpCount: 0
         });
+        tx.update(roomRef, { playerCount: currentCount + 1 });
       });
 
       joined = true;
