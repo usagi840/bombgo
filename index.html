@@ -110,7 +110,7 @@
     #player-slots { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
     .slot {
       width: 130px;
-      height: 84px;
+      height: 128px;
       border: 2px dashed #665f57;
       border-radius: 10px;
       display: flex;
@@ -129,6 +129,12 @@
     .slot .name { font-size: 15px; font-weight: 600; }
     .slot.filled .name { color: var(--accent); }
     .slot .empty-icon { font-size: 20px; opacity: 0.4; }
+    .slot .avatar {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
 
     #lobby-hint { font-size: 13px; color: var(--text-dim); max-width: 480px; }
 
@@ -204,7 +210,9 @@
       const div = document.createElement('div');
       div.className = 'slot' + (p ? ' filled' : '');
       if(p){
-        div.innerHTML = `<div class="num">JOUEUR ${i}${i===1?' · HÔTE':''}</div><div class="name">${escapeHtml(p.nickname || ('Joueur '+i))}</div>`;
+        div.innerHTML = `<div class="num">JOUEUR ${i}${i===1?' · HÔTE':''}</div>
+          <img class="avatar" src="assets/perso${i}.png" alt="" onerror="this.style.display='none'">
+          <div class="name">${escapeHtml(p.nickname || ('Joueur '+i))}</div>`;
       } else {
         div.innerHTML = `<div class="num">JOUEUR ${i}</div><div class="empty-icon">＋</div>`;
       }
