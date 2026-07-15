@@ -347,6 +347,7 @@
     playing = true;
     show('play-screen');
     requestWakeLock();
+    setupWebRTC();
 
     const manager = nipplejs.create({
       zone: document.getElementById('joystick-zone'),
@@ -383,23 +384,34 @@
     setInterval(() => scheduleSend(), 200);
   }
 
-  // ==== Envoi throttlé (réactif) de l'état vers Firestore ====
-  const SEND_MIN_GAP = 40; // ms minimum entre deux envois "normaux"
+  // ==== Envoi throttlé (réactif) de l'état ====
+  // Si le canal WebRTC direct est ouvert, on l'utilise (quasi zéro latence).
+  // Sinon on retombe sur Firestore comme avant.
   let lastSendAt = 0;
   let pendingTimeout = null;
 
+  function minGap(){
+    return (channelOpen && dataChannel && dataChannel.readyState === 'open') ? 16 : 40;
+  }
+
   function doSend(){
     lastSendAt = Date.now();
-    const playerRef = roomRef.collection('players').doc(deviceId);
-    playerRef.update({
-      moveX: controlState.moveX,
-      jumpCount: controlState.jumpCount
-    }).catch(() => {});
+    const payload = { moveX: controlState.moveX, jumpCount: controlState.jumpCount };
+
+    if(channelOpen && dataChannel && dataChannel.readyState === 'open'){
+      try {
+        dataChannel.send(JSON.stringify(payload));
+        return;
+      } catch(e){ /* le canal a un souci, on retombe sur Firestore ci-dessous */ }
+    }
+
+    roomRef.collection('players').doc(deviceId).update(payload).catch(() => {});
   }
 
   function scheduleSend(immediate){
     const now = Date.now();
-    if(immediate || now - lastSendAt >= SEND_MIN_GAP){
+    const gap = minGap();
+    if(immediate || now - lastSendAt >= gap){
       if(pendingTimeout){ clearTimeout(pendingTimeout); pendingTimeout = null; }
       doSend();
       return;
@@ -408,8 +420,60 @@
       pendingTimeout = setTimeout(() => {
         pendingTimeout = null;
         doSend();
-      }, SEND_MIN_GAP - (now - lastSendAt));
+      }, gap - (now - lastSendAt));
     }
+  }
+
+  // ==== WebRTC : connexion directe avec l'écran principal ====
+  let peerConnection = null;
+  let dataChannel = null;
+  let channelOpen = false;
+
+  function setupWebRTC(){
+    try {
+      peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    } catch(e){ return; } // WebRTC indisponible : on restera sur Firestore
+
+    const playerRef = roomRef.collection('players').doc(deviceId);
+    const hostCandidatesRef = playerRef.collection('hostCandidates');
+    const clientCandidatesRef = playerRef.collection('clientCandidates');
+
+    peerConnection.onicecandidate = (event) => {
+      if(event.candidate){
+        clientCandidatesRef.add(event.candidate.toJSON()).catch(() => {});
+      }
+    };
+
+    peerConnection.ondatachannel = (event) => {
+      dataChannel = event.channel;
+      dataChannel.onopen = () => { channelOpen = true; };
+      dataChannel.onclose = () => { channelOpen = false; };
+    };
+
+    let answered = false;
+    const tryAnswer = async (offer) => {
+      if(answered || !offer) return;
+      answered = true;
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        await playerRef.set({ answer: { type: answer.type, sdp: answer.sdp } }, { merge: true });
+      } catch(e){ answered = false; }
+    };
+
+    playerRef.onSnapshot(snap => {
+      const data = snap.data();
+      if(data && data.offer) tryAnswer(data.offer);
+    });
+
+    hostCandidatesRef.onSnapshot(snap => {
+      snap.docChanges().forEach(change => {
+        if(change.type === 'added'){
+          peerConnection.addIceCandidate(new RTCIceCandidate(change.doc.data())).catch(() => {});
+        }
+      });
+    });
   }
 
   async function requestWakeLock(){
