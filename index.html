@@ -83,7 +83,12 @@
 
   var joinScreen = true;
   var joinStage = 'p1assign';
-  var player1Pad = null, player2Pad = null;
+  // On retient l'identifiant unique de chaque manette (pad.id) plutôt que
+  // son numéro d'index. En Bluetooth, une manette peut se déconnecter une
+  // fraction de seconde et se reconnecter à un autre index : si on avait
+  // gardé l'index, le jeu se serait mis à lire la mauvaise manette (ou plus
+  // aucune). Avec l'id, on la retrouve à chaque frame quel que soit son index.
+  var player1PadId = null, player2PadId = null;
   var prevButtons = {};
 
   // ==== Layout des niveaux ====
@@ -188,13 +193,14 @@
 
       this.input.gamepad.on('disconnected', pad => {
         console.log('Manette déconnectée:', pad.index, pad.id);
-        if(pad.index === player1Pad || pad.index === player2Pad){
-          joinScreen = true;
-          joinStage = 'p1assign';
-          player1Pad = null;
-          player2Pad = null;
-          prevButtons = {};
-          joinText.setText('Manette déconnectée — reconnecte-toi (Joueur 1 : appuie sur un bouton)');
+        // On ne réinitialise rien tout de suite : en Bluetooth une manette
+        // peut se "déconnecter" une fraction de seconde puis revenir toute
+        // seule (avec le même id). Comme on la retrouve par id dans
+        // update(), tout continue de fonctionner sans rien faire ici. On
+        // ne prévient le joueur que pour l'informer, sans casser la partie.
+        if(pad.id === player1PadId || pad.id === player2PadId){
+          joinText.setText('Manette signalée déconnectée (reconnexion automatique en cours...)');
+          this.time.delayedCall(600, () => { if(joinScreen === false) joinText.setText(''); });
         }
       });
     }
@@ -214,14 +220,26 @@
         return;
       }
 
-      const pad1 = allPads[player1Pad];
-      const pad2 = allPads[player2Pad];
+      const pad1 = findPadById(allPads, player1PadId);
+      const pad2 = findPadById(allPads, player2PadId);
 
       movePlayer(player1, pad1, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1, CONTROLS.player1);
       movePlayer(player2, pad2, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2, CONTROLS.player2);
     } catch(err) {
       console.error(err);
     }
+  }
+
+  // Retrouve la manette actuelle correspondant à un identifiant donné,
+  // quel que soit son index à ce moment précis. C'est ce qui garantit que
+  // Joueur 1 et Joueur 2 restent chacun sur LEUR manette, même si l'ordre
+  // ou les index changent suite à une micro-coupure Bluetooth.
+  function findPadById(allPads, id){
+    if(!id) return null;
+    for(let i = 0; i < allPads.length; i++){
+      if(allPads[i] && allPads[i].id === id) return allPads[i];
+    }
+    return null;
   }
 
   function updateDebugText(allPads){
@@ -250,12 +268,12 @@
 
         if(handledThisFrame || !justPressed) return;
 
-        if(joinStage === 'p1assign' && index !== player2Pad){
-          player1Pad = index;
+        if(joinStage === 'p1assign' && pad.id !== player2PadId){
+          player1PadId = pad.id;
           joinStage = 'p2assign';
           handledThisFrame = true;
-        } else if(joinStage === 'p2assign' && index !== player1Pad){
-          player2Pad = index;
+        } else if(joinStage === 'p2assign' && pad.id !== player1PadId){
+          player2PadId = pad.id;
           joinStage = 'done';
           joinScreen = false;
           handledThisFrame = true;
