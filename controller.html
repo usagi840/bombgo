@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Solo — Manette</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.10.1/dist/nipplejs.min.js"></script>
+
+  <style>
+    :root{
+      --bg: #413d3d;
+      --panel: #2b2828;
+      --border: #291515;
+      --accent: #e8b04b;
+      --accent-dim: #a97f2f;
+      --text: #f2ede3;
+      --text-dim: #b8b0a4;
+      --danger: #c0503f;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overscroll-behavior: none;
+      touch-action: none;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+    body { display: flex; flex-direction: column; }
+
+    .screen {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 24px;
+      text-align: center;
+    }
+    h1 {
+      margin: 0;
+      font-size: 26px;
+      letter-spacing: 5px;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+    p.hint { color: var(--text-dim); font-size: 14px; max-width: 320px; }
+
+    input[type="text"] {
+      width: 240px;
+      padding: 12px 14px;
+      font-size: 18px;
+      border-radius: 8px;
+      border: 2px solid var(--accent-dim);
+      background: var(--panel);
+      color: var(--text);
+      text-align: center;
+    }
+    input[type="text"]:focus { outline: none; border-color: var(--accent); }
+
+    button {
+      padding: 14px 28px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      border-radius: 10px;
+      border: none;
+      background: var(--accent);
+      color: #241c0d;
+      cursor: pointer;
+    }
+    button:active { transform: scale(0.97); }
+    button:disabled { background: #5c574f; color: #948d80; }
+
+    button.secondary {
+      background: transparent;
+      border: 2px solid var(--accent-dim);
+      color: var(--text);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: var(--panel);
+      border: 1px solid var(--accent-dim);
+      font-size: 13px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+
+    .error { color: var(--danger); font-weight: 600; }
+
+    .spinner {
+      width: 34px; height: 34px;
+      border: 4px solid #6b6459;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ==== Écran manette ==== */
+    #play-screen {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+      padding: 0;
+      justify-content: space-between;
+    }
+    #play-screen.active { display: flex; }
+    #top-bar {
+      padding: 10px 16px;
+      font-size: 13px;
+      color: var(--text-dim);
+      text-align: center;
+    }
+    #controls-row {
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding: 0 24px 34px 24px;
+    }
+    #joystick-zone {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.2);
+      border: 2px solid var(--accent-dim);
+    }
+    #jump-btn {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #241c0d;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      box-shadow: 0 6px 0 var(--accent-dim);
+    }
+    #jump-btn.pressed {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 var(--accent-dim);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Étape 1 : pseudo + rejoindre -->
+  <div id="join-screen" class="screen">
+    <h1>Solo</h1>
+    <div id="room-badge" class="badge">Salle: ----</div>
+    <input id="nickname-input" type="text" maxlength="12" placeholder="Ton pseudo">
+    <button id="join-btn">Rejoindre</button>
+    <p id="join-error" class="error" style="display:none;"></p>
+  </div>
+
+  <!-- Étape 2 : salle manquante / code manuel -->
+  <div id="no-room-screen" class="screen" style="display:none;">
+    <h1>Solo</h1>
+    <p class="hint">Scanne le QR code affiché sur l'écran principal, ou entre le code de la salle.</p>
+    <input id="room-code-input" type="text" maxlength="4" placeholder="CODE SALLE" style="text-transform:uppercase;">
+    <button id="use-code-btn">Continuer</button>
+  </div>
+
+  <!-- Étape 3 : attente -->
+  <div id="waiting-screen" class="screen" style="display:none;">
+    <h1>Solo</h1>
+    <div class="spinner"></div>
+    <p id="waiting-text" class="hint">En attente des autres joueurs…</p>
+    <button id="start-btn" style="display:none;">Lancer la partie</button>
+  </div>
+
+  <!-- Étape 4 : jeu -->
+  <div id="play-screen">
+    <div id="top-bar">Tu es <span id="play-nickname"></span></div>
+    <div id="controls-row">
+      <div id="joystick-zone"></div>
+      <div id="jump-btn">SAUT</div>
+    </div>
+  </div>
+
+<script>
+  firebase.initializeApp({
+    apiKey: "AIzaSyBnQb5b5h62Jl4WeiKEBMeEmivbOK-B70k",
+    authDomain: "bombgo-classement.firebaseapp.com",
+    projectId: "bombgo-classement",
+    appId: "1:113313571513:web:73863b02df8193606ef168"
+  });
+  const db = firebase.firestore();
+  const MAX_PLAYERS = 4;
+
+  // ==== Identifiant unique de l'appareil (permet de reprendre sa place si on recharge) ====
+  let deviceId = localStorage.getItem("deviceId");
+  if(!deviceId){ deviceId = crypto.randomUUID(); localStorage.setItem("deviceId", deviceId); }
+
+  let nickname = localStorage.getItem("playerNickname") || "";
+  document.getElementById('nickname-input').value = nickname;
+
+  const params = new URLSearchParams(window.location.search);
+  let roomId = (params.get('room') || '').toUpperCase();
+
+  let roomRef = null;
+  let mySlot = null;
+  let joined = false;
+
+  function show(id){
+    ['join-screen','no-room-screen','waiting-screen','play-screen'].forEach(s => {
+      const el = document.getElementById(s);
+      if(s === 'play-screen'){
+        el.classList.toggle('active', s === id);
+      } else {
+        el.style.display = (s === id) ? 'flex' : 'none';
+      }
+    });
+  }
+
+  async function init(){
+    if(!roomId){
+      show('no-room-screen');
+      return;
+    }
+    roomRef = db.collection('rooms').doc(roomId);
+    const snap = await roomRef.get();
+    if(!snap.exists){
+      show('no-room-screen');
+      document.getElementById('no-room-screen').querySelector('.hint').textContent =
+        "Cette salle n'existe pas ou plus. Vérifie le code ou re-scanne le QR code.";
+      return;
+    }
+    document.getElementById('room-badge').textContent = 'Salle: ' + roomId;
+    show('join-screen');
+
+    // si on a déjà une place dans cette salle (rechargement de page), on la reprend
+    const existing = await roomRef.collection('players').doc(deviceId).get();
+    if(existing.exists){
+      mySlot = existing.data().slot;
+      joined = true;
+      enterWaitingOrPlay();
+    }
+  }
+
+  document.getElementById('use-code-btn').addEventListener('click', () => {
+    const code = document.getElementById('room-code-input').value.trim().toUpperCase();
+    if(code.length < 4) return;
+    roomId = code;
+    init();
+  });
+
+  document.getElementById('join-btn').addEventListener('click', async () => {
+    nickname = document.getElementById('nickname-input').value.trim() || 'Joueur';
+    localStorage.setItem('playerNickname', nickname);
+
+    const errorEl = document.getElementById('join-error');
+    errorEl.style.display = 'none';
+    document.getElementById('join-btn').disabled = true;
+
+    try {
+      await db.runTransaction(async (tx) => {
+        const roomSnap = await tx.get(roomRef);
+        if(!roomSnap.exists) throw new Error("Cette salle n'existe plus.");
+        const roomData = roomSnap.data();
+        if(roomData.started) throw new Error("La partie a déjà commencé.");
+
+        const playersSnap = await tx.get(roomRef.collection('players'));
+        if(playersSnap.docs.some(d => d.id === deviceId)) return; // déjà inscrit
+
+        const takenSlots = playersSnap.docs.map(d => d.data().slot);
+        if(takenSlots.length >= MAX_PLAYERS) throw new Error("La salle est complète (4 joueurs max).");
+
+        let slot = 1;
+        while(takenSlots.includes(slot)) slot++;
+        mySlot = slot;
+
+        tx.set(roomRef.collection('players').doc(deviceId), {
+          slot,
+          nickname,
+          joinedAt: Date.now(),
+          moveX: 0,
+          jumpCount: 0
+        });
+      });
+
+      joined = true;
+      enterWaitingOrPlay();
+    } catch(err){
+      errorEl.textContent = err.message || "Impossible de rejoindre la salle.";
+      errorEl.style.display = 'block';
+    } finally {
+      document.getElementById('join-btn').disabled = false;
+    }
+  });
+
+  function enterWaitingOrPlay(){
+    show('waiting-screen');
+    document.getElementById('play-nickname').textContent = nickname;
+
+    if(mySlot === 1){
+      document.getElementById('start-btn').style.display = 'inline-block';
+      document.getElementById('waiting-text').textContent =
+        'Attends que tout le monde ait rejoint, puis lance la partie.';
+    } else {
+      document.getElementById('start-btn').style.display = 'none';
+      document.getElementById('waiting-text').textContent =
+        "En attente que le joueur 1 lance la partie…";
+    }
+
+    // écoute le statut de la salle pour basculer vers l'écran manette
+    roomRef.onSnapshot(doc => {
+      const data = doc.data();
+      if(data && data.started){
+        startPlaying();
+      }
+    });
+  }
+
+  document.getElementById('start-btn').addEventListener('click', async () => {
+    document.getElementById('start-btn').disabled = true;
+    await roomRef.update({ started: true });
+  });
+
+  // ==== Écran manette : joystick + saut ====
+  let controlState = { moveX: 0, jumpCount: 0 };
+  let playing = false;
+
+  function startPlaying(){
+    if(playing) return;
+    playing = true;
+    show('play-screen');
+    requestWakeLock();
+
+    const manager = nipplejs.create({
+      zone: document.getElementById('joystick-zone'),
+      mode: 'static',
+      position: { left: '50%', top: '50%' },
+      color: '#e8b04b',
+      size: 130
+    });
+
+    manager.on('move', (evt, data) => {
+      if(!data || !data.vector) return;
+      controlState.moveX = Math.max(-1, Math.min(1, data.vector.x));
+    });
+    manager.on('end', () => {
+      controlState.moveX = 0;
+    });
+
+    const jumpBtn = document.getElementById('jump-btn');
+    const triggerJump = (ev) => {
+      ev.preventDefault();
+      controlState.jumpCount += 1;
+      jumpBtn.classList.add('pressed');
+    };
+    jumpBtn.addEventListener('touchstart', triggerJump, { passive:false });
+    jumpBtn.addEventListener('mousedown', triggerJump);
+    jumpBtn.addEventListener('touchend', () => jumpBtn.classList.remove('pressed'));
+    jumpBtn.addEventListener('mouseup', () => jumpBtn.classList.remove('pressed'));
+
+    // envoie régulièrement l'état de la manette à Firestore
+    setInterval(() => {
+      roomRef.collection('players').doc(deviceId).update({
+        moveX: controlState.moveX,
+        jumpCount: controlState.jumpCount
+      }).catch(() => {});
+    }, 80);
+  }
+
+  async function requestWakeLock(){
+    try {
+      if('wakeLock' in navigator){
+        await navigator.wakeLock.request('screen');
+      }
+    } catch(e){ /* pas grave si indisponible */ }
+  }
+
+  init();
+</script>
+</body>
+</html>
