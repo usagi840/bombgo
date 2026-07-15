@@ -6,15 +6,9 @@
   <title>Solo</title>
   <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
 
-  <!-- Phaser -->
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
-
-  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
-  <!-- QR code generator -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <style>
     :root{
@@ -25,6 +19,7 @@
       --accent-dim: #a97f2f;
       --text: #f2ede3;
       --text-dim: #b8b0a4;
+      --danger: #c0503f;
     }
     * { box-sizing: border-box; }
     body {
@@ -33,25 +28,16 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      height: 100vh;
+      min-height: 100vh;
       font-family: 'Segoe UI', system-ui, sans-serif;
       color: var(--text);
     }
-    canvas { border: 4px solid var(--border); }
 
-    #stage {
-      position: relative;
-      width: 800px;
-      height: 600px;
-    }
-
-    /* ==== Lobby overlay ==== */
     #lobby {
-      position: absolute;
-      inset: 0;
-      z-index: 10;
-      background: radial-gradient(circle at 50% 0%, #514a44 0%, var(--bg) 70%);
+      width: 800px;
+      min-height: 600px;
       border: 4px solid var(--border);
+      background: radial-gradient(circle at 50% 0%, #514a44 0%, var(--bg) 70%);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -68,7 +54,7 @@
       color: var(--accent);
       text-transform: uppercase;
     }
-    #lobby .subtitle {
+    .subtitle {
       margin: -12px 0 0 0;
       color: var(--text-dim);
       font-size: 14px;
@@ -78,12 +64,24 @@
       display: flex;
       align-items: center;
       gap: 36px;
+      flex-wrap: wrap;
+      justify-content: center;
     }
     #qrcode {
       background: #fff;
       padding: 10px;
       border-radius: 6px;
       line-height: 0;
+      min-width: 176px;
+      min-height: 176px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #qrcode .qr-fallback {
+      color: #291515;
+      font-size: 12px;
+      max-width: 150px;
     }
     #room-code {
       font-size: 42px;
@@ -109,10 +107,7 @@
       gap: 6px;
     }
 
-    #player-slots {
-      display: flex;
-      gap: 14px;
-    }
+    #player-slots { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
     .slot {
       width: 130px;
       height: 84px;
@@ -130,50 +125,47 @@
       border-color: var(--accent);
       background: rgba(232,176,75,0.12);
     }
-    .slot .num {
-      font-size: 11px;
-      color: var(--text-dim);
-      letter-spacing: 1px;
-    }
-    .slot .name {
-      font-size: 15px;
-      font-weight: 600;
-    }
+    .slot .num { font-size: 11px; color: var(--text-dim); letter-spacing: 1px; }
+    .slot .name { font-size: 15px; font-weight: 600; }
     .slot.filled .name { color: var(--accent); }
     .slot .empty-icon { font-size: 20px; opacity: 0.4; }
 
-    #lobby-hint {
-      font-size: 13px;
-      color: var(--text-dim);
-      max-width: 480px;
-    }
+    #lobby-hint { font-size: 13px; color: var(--text-dim); max-width: 480px; }
 
-    #game-wrapper { display: none; }
+    #error-box {
+      display: none;
+      border: 2px solid var(--danger);
+      background: rgba(192,80,63,0.12);
+      color: #ffb3a5;
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      max-width: 500px;
+    }
   </style>
 </head>
 <body>
 
-  <div id="stage">
-    <div id="lobby">
-      <div>
-        <h1>Solo</h1>
-        <p class="subtitle">Scannez pour rejoindre la partie</p>
-      </div>
-      <div id="lobby-body">
-        <div id="qr-col">
-          <div id="qrcode"></div>
-          <div id="room-code-label">ou entrez le code</div>
-          <div id="room-code">----</div>
-        </div>
-        <div id="player-slots"></div>
-      </div>
-      <p id="lobby-hint">Le premier joueur à rejoindre pourra lancer la partie depuis son téléphone. 1 à 4 joueurs.</p>
+  <div id="lobby">
+    <div>
+      <h1>Solo</h1>
+      <p class="subtitle">Scannez pour rejoindre la partie</p>
     </div>
-    <div id="game-wrapper"></div>
+
+    <div id="error-box"></div>
+
+    <div id="lobby-body">
+      <div id="qr-col">
+        <div id="qrcode"></div>
+        <div id="room-code-label">ou entrez le code</div>
+        <div id="room-code">----</div>
+      </div>
+      <div id="player-slots"></div>
+    </div>
+    <p id="lobby-hint">Le premier joueur à rejoindre pourra lancer la partie depuis son téléphone. 1 à 4 joueurs.</p>
   </div>
 
 <script>
-  // ==== Firebase ====
   firebase.initializeApp({
     apiKey: "AIzaSyBnQb5b5h62Jl4WeiKEBMeEmivbOK-B70k",
     authDomain: "bombgo-classement.firebaseapp.com",
@@ -181,10 +173,14 @@
     appId: "1:113313571513:web:73863b02df8193606ef168"
   });
   const db = firebase.firestore();
-
   const MAX_PLAYERS = 4;
 
-  // ==== Création de la salle ====
+  function showError(msg){
+    const box = document.getElementById('error-box');
+    box.textContent = msg;
+    box.style.display = 'block';
+  }
+
   function makeRoomId(len = 4){
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sans O/0/I/1 ambigus
     let id = "";
@@ -192,50 +188,10 @@
     return id;
   }
 
-  let roomId = null;
-  let roomRef = null;
-  let playersUnsub = null;
-  let roomUnsub = null;
-  let latestPlayers = []; // triés par slot
-
-  async function createRoom(){
-    roomId = makeRoomId();
-    roomRef = db.collection("rooms").doc(roomId);
-    await roomRef.set({
-      createdAt: Date.now(),
-      started: false,
-      playerCount: 0,
-      maxPlayers: MAX_PLAYERS
-    });
-
-    document.getElementById('room-code').textContent = roomId;
-
-    const controllerUrl = new URL('controller.html', window.location.href);
-    controllerUrl.searchParams.set('room', roomId);
-
-    document.getElementById('qrcode').innerHTML = '';
-    new QRCode(document.getElementById('qrcode'), {
-      text: controllerUrl.toString(),
-      width: 176,
-      height: 176,
-      colorDark: "#291515",
-      colorLight: "#ffffff"
-    });
-
-    renderSlots([]);
-
-    playersUnsub = roomRef.collection('players').orderBy('slot').onSnapshot(snap => {
-      latestPlayers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      renderSlots(latestPlayers);
-    });
-
-    roomUnsub = roomRef.onSnapshot(doc => {
-      const data = doc.data();
-      if(data && data.started && !window.__gameLaunched){
-        window.__gameLaunched = true;
-        launchGame(latestPlayers);
-      }
-    });
+  function escapeHtml(str){
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
   }
 
   function renderSlots(players){
@@ -254,236 +210,64 @@
     }
   }
 
-  function escapeHtml(str){
-    const d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
+  async function createRoom(){
+    let roomId, roomRef;
+
+    try {
+      roomId = makeRoomId();
+      roomRef = db.collection("rooms").doc(roomId);
+      await roomRef.set({
+        createdAt: Date.now(),
+        started: false,
+        playerCount: 0,
+        maxPlayers: MAX_PLAYERS
+      });
+    } catch(err){
+      showError("Impossible de créer la salle (Firestore). Vérifie ta connexion et les règles Firestore. Détail : " + err.message);
+      return;
+    }
+
+    // Le code de salle doit toujours s'afficher, même si le QR échoue ensuite
+    document.getElementById('room-code').textContent = roomId;
+
+    try {
+      const controllerUrl = new URL('controller.html', window.location.href);
+      controllerUrl.searchParams.set('room', roomId);
+
+      if(typeof QRCode === 'undefined'){
+        throw new Error('bibliothèque QR non chargée');
+      }
+      document.getElementById('qrcode').innerHTML = '';
+      new QRCode(document.getElementById('qrcode'), {
+        text: controllerUrl.toString(),
+        width: 176,
+        height: 176,
+        colorDark: "#291515",
+        colorLight: "#ffffff"
+      });
+    } catch(err){
+      document.getElementById('qrcode').innerHTML =
+        `<div class="qr-fallback">QR indisponible — utilisez le code ${roomId} sur l'écran de la manette.</div>`;
+    }
+
+    renderSlots([]);
+
+    let launched = false;
+
+    roomRef.collection('players').orderBy('slot').onSnapshot(snap => {
+      renderSlots(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => showError("Erreur de synchronisation des joueurs : " + err.message));
+
+    roomRef.onSnapshot(doc => {
+      const data = doc.data();
+      if(data && data.started && !launched){
+        launched = true;
+        window.location.href = 'game.html?room=' + roomId;
+      }
+    }, err => showError("Erreur de synchronisation de la salle : " + err.message));
   }
 
   createRoom();
-
-  // ============================================================
-  // ==================  JEU (lancé au démarrage)  ==============
-  // ============================================================
-
-  var player1, cursors, stars, bombs, platforms, debugText;
-  var gameOver = false;
-  var currentLevel = 0;
-  var platformsArray = [];
-
-  var activePlayers = [];      // [{slot, sprite, scoreText, deviceId, controlState:{moveX,jumpCount}, lastJumpCount}]
-  var controlUnsubs = [];
-
-  var SPAWN_POINTS = {
-    1: [ {x:400,y:450} ],
-    2: [ {x:150,y:450}, {x:650,y:450} ],
-    3: [ {x:120,y:450}, {x:400,y:450}, {x:680,y:450} ],
-    4: [ {x:100,y:450}, {x:320,y:450}, {x:480,y:450}, {x:700,y:450} ]
-  };
-
-  // dude1/dude2 texture, avec une teinte pour différencier joueur 3 et 4
-  var PLAYER_VISUALS = [
-    { tex: 'dude1', tint: null },
-    { tex: 'dude2', tint: null },
-    { tex: 'dude1', tint: 0x88c8ff },
-    { tex: 'dude2', tint: 0xff9ecf }
-  ];
-
-  // ==== Layout des niveaux ====
-  var platformLayouts = [
-    [{x:600,y:400},{x:50,y:250},{x:750,y:220}],
-    [{x:150,y:350},{x:400,y:200},{x:650,y:300},{x:400,y:470}],
-    [{x:700,y:250},{x:80,y:150},{x:500,y:400}],
-    [{x:300,y:420},{x:40,y:200},{x:650,y:120},{x:400,y:300}],
-    [{x:200,y:380},{x:40,y:140},{x:600,y:240},{x:350,y:100}],
-    [{x:200,y:150},{x:500,y:310},{x:700,y:180},{x:350,y:460}],
-    [{x:100,y:380},{x:300,y:250},{x:500,y:150},{x:700,y:250}],
-    [{x:50,y:380},{x:250,y:200},{x:450,y:100},{x:650,y:200}],
-    [{x:400,y:380},{x:200,y:250},{x:600,y:150}],
-    [{x:100,y:500},{x:300,y:350},{x:500,y:200},{x:700,y:100}]
-  ];
-
-  var config = {
-    type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    parent: 'game-wrapper',
-    physics: { default: 'arcade', arcade: { gravity:{y:300}, debug:false } },
-    scene: { preload, create, update }
-  };
-
-  var phaserGame = null;
-
-  function launchGame(players){
-    if(playersUnsub) playersUnsub();
-    if(roomUnsub) roomUnsub();
-    // on fige la liste des joueurs pour la partie
-    window.__players = players.slice(0, MAX_PLAYERS);
-
-    document.getElementById('lobby').style.display = 'none';
-    document.getElementById('game-wrapper').style.display = 'block';
-
-    phaserGame = new Phaser.Game(config);
-  }
-
-  function preload(){
-    this.load.image('sky','assets/sky.png');
-    this.load.image('ground','assets/platform.png');
-    this.load.image('star','assets/piece1.png');
-    this.load.image('bomb','assets/bombe.png');
-    this.load.image('vie','assets/vie1.png');
-    this.load.image('novie','assets/vie2.png');
-    this.load.image('tremplin','assets/tremplin.png');
-    this.load.spritesheet('dude1', 'assets/personnage1.png', {frameWidth:320, frameHeight:480});
-    this.load.spritesheet('dude2', 'assets/personnage2.png', {frameWidth:320, frameHeight:480});
-  }
-
-  function create(){
-    this.add.image(400,300,'sky');
-
-    platforms = this.physics.add.staticGroup();
-    platforms.create(400,568,'ground').setScale(2).refreshBody();
-    createPlatformsForLevel(currentLevel);
-
-    this.anims.create({key:'left1', frames:this.anims.generateFrameNumbers('dude1',{start:0,end:3}), frameRate:10, repeat:-1});
-    this.anims.create({key:'turn1', frames:[{key:'dude1',frame:4}], frameRate:20});
-    this.anims.create({key:'right1', frames:this.anims.generateFrameNumbers('dude1',{start:5,end:8}), frameRate:10, repeat:-1});
-
-    this.anims.create({key:'left2', frames:this.anims.generateFrameNumbers('dude2',{start:0,end:3}), frameRate:10, repeat:-1});
-    this.anims.create({key:'turn2', frames:[{key:'dude2',frame:4}], frameRate:20});
-    this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude2',{start:5,end:8}), frameRate:10, repeat:-1});
-
-    stars = this.physics.add.group({key:'star', repeat:11, setXY:{x:12,y:0,stepX:70}});
-    stars.children.iterate(c => { c.setBounceY(Phaser.Math.FloatBetween(0.4,0.8)); c.setScale(0.015); });
-
-    bombs = this.physics.add.group();
-
-    // ==== création des joueurs actifs ====
-    const players = window.__players || [];
-    const count = Math.max(1, players.length);
-    const spawns = SPAWN_POINTS[count] || SPAWN_POINTS[4];
-
-    activePlayers = [];
-    players.forEach((p, idx) => {
-      const visual = PLAYER_VISUALS[idx % PLAYER_VISUALS.length];
-      const spawn = spawns[idx] || {x:400,y:450};
-      const animSuffix = visual.tex === 'dude1' ? '1' : '2';
-
-      const sprite = this.physics.add.sprite(spawn.x, spawn.y, visual.tex)
-        .setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
-      if(visual.tint) sprite.setTint(visual.tint);
-      sprite.setData('animSuffix', animSuffix);
-
-      const isLeft = idx % 2 === 0;
-      const row = Math.floor(idx / 2);
-      const scoreText = this.add.text(
-        isLeft ? 16 : 784,
-        16 + row * 34,
-        `${p.nickname || ('Joueur ' + p.slot)}: 0`,
-        { fontSize: '22px', fill: '#000' }
-      );
-      if(!isLeft) scoreText.setOrigin(1, 0);
-
-      const scoreEffect = this.add.text(
-        isLeft ? 16 : 784,
-        50 + row * 34,
-        '',
-        { fontSize: '18px', fill: '#ff0000' }
-      );
-      if(!isLeft) scoreEffect.setOrigin(1, 0);
-
-      const entry = {
-        slot: p.slot,
-        deviceId: p.id,
-        sprite,
-        scoreText,
-        scoreEffect,
-        score: 0,
-        control: { moveX: 0, jumpCount: 0 },
-        lastJumpCount: 0
-      };
-      activePlayers.push(entry);
-
-      this.physics.add.collider(sprite, platforms);
-      this.physics.add.collider(sprite, bombs, (pl, bomb) => hitBomb(entry, bomb), null, this);
-      this.physics.add.overlap(sprite, stars, (pl, star) => collectStar(entry, star), null, this);
-
-      // écoute Firestore de la manette de ce joueur
-      const unsub = roomRef.collection('players').doc(p.id).onSnapshot(doc => {
-        const data = doc.data();
-        if(!data) return;
-        entry.control.moveX = typeof data.moveX === 'number' ? data.moveX : 0;
-        entry.control.jumpCount = data.jumpCount || 0;
-      });
-      controlUnsubs.push(unsub);
-    });
-
-    this.physics.add.collider(stars, platforms);
-    this.physics.add.collider(bombs, platforms);
-  }
-
-  function update(){
-    if(gameOver) return;
-
-    activePlayers.forEach(entry => {
-      const { sprite, control } = entry;
-      const suffix = sprite.getData('animSuffix');
-      const moveX = control.moveX || 0;
-
-      if(moveX < -0.15){
-        sprite.setVelocityX(-160);
-        sprite.anims.play('left' + suffix, true);
-      } else if(moveX > 0.15){
-        sprite.setVelocityX(160);
-        sprite.anims.play('right' + suffix, true);
-      } else {
-        sprite.setVelocityX(0);
-        sprite.anims.play('turn' + suffix);
-      }
-
-      if(control.jumpCount !== entry.lastJumpCount){
-        entry.lastJumpCount = control.jumpCount;
-        if(sprite.body.touching.down){
-          sprite.setVelocityY(-330);
-        }
-      }
-    });
-  }
-
-  function collectStar(entry, star){
-    star.disableBody(true,true);
-    entry.score += 10;
-    entry.scoreText.setText(`${entry.scoreText.text.split(':')[0]}: ${entry.score}`);
-
-    if(stars.countActive(true)===0){
-      changeLevel();
-      stars.children.iterate(c => c.enableBody(true,c.x,0,true,true));
-      let x = (entry.sprite.x<400)?Phaser.Math.Between(400,800):Phaser.Math.Between(0,400);
-      let bomb = bombs.create(x,16,'bomb').setScale(0.015);
-      bomb.body.setSize(bomb.width*0.015, bomb.height*0.015);
-      bomb.body.setOffset(bomb.width*0.015, bomb.height*0.015);
-      bomb.setBounce(1).setCollideWorldBounds(true).setVelocity(Phaser.Math.Between(-200,200),20);
-    }
-  }
-
-  function hitBomb(entry, bomb){
-    bomb.disableBody(true,true);
-    entry.score = Math.max(0, entry.score - 20);
-    entry.scoreText.setText(`${entry.scoreText.text.split(':')[0]}: ${entry.score}`);
-    entry.scoreEffect.setText("-20");
-    setTimeout(() => entry.scoreEffect.setText(""), 1000);
-  }
-
-  function createPlatformsForLevel(level){
-    platformsArray.forEach(p=>p.destroy());
-    platformsArray=[];
-    platformLayouts[level].forEach(pos=>platformsArray.push(platforms.create(pos.x,pos.y,'ground')));
-  }
-
-  function changeLevel(){
-    currentLevel = (currentLevel+1)%platformLayouts.length;
-    createPlatformsForLevel(currentLevel);
-  }
 </script>
 </body>
 </html>
