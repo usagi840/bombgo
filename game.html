@@ -237,9 +237,12 @@
       roomRef.collection('players').doc(p.id).onSnapshot(doc => {
         const data = doc.data();
         if(!data) return;
+        if(entry.channelReady) return; // le canal WebRTC direct est prioritaire, plus rapide
         entry.control.moveX = typeof data.moveX === 'number' ? data.moveX : 0;
         entry.control.jumpCount = data.jumpCount || 0;
       });
+
+      setupPlayerWebRTC(entry, p.id);
     });
 
     this.physics.add.collider(stars, platforms);
@@ -296,6 +299,58 @@
     entry.scoreText.setText(`${entry.scoreText.text.split(':')[0]}: ${entry.score}`);
     entry.scoreEffect.setText("-20");
     setTimeout(() => entry.scoreEffect.setText(""), 1000);
+  }
+
+  // ==== WebRTC : connexion directe avec le téléphone de ce joueur ====
+  function setupPlayerWebRTC(entry, playerId){
+    let pc;
+    try {
+      pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    } catch(e){ return; } // WebRTC indisponible : on reste sur Firestore
+
+    const playerRef = roomRef.collection('players').doc(playerId);
+    const hostCandidatesRef = playerRef.collection('hostCandidates');
+    const clientCandidatesRef = playerRef.collection('clientCandidates');
+
+    const channel = pc.createDataChannel('controls', { ordered: false, maxRetransmits: 0 });
+    channel.onopen = () => { entry.channelReady = true; };
+    channel.onclose = () => { entry.channelReady = false; };
+    channel.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if(typeof msg.moveX === 'number') entry.control.moveX = msg.moveX;
+        if(typeof msg.jumpCount === 'number') entry.control.jumpCount = msg.jumpCount;
+      } catch(e){}
+    };
+
+    pc.onicecandidate = (event) => {
+      if(event.candidate){
+        hostCandidatesRef.add(event.candidate.toJSON()).catch(() => {});
+      }
+    };
+
+    pc.createOffer()
+      .then(offer => pc.setLocalDescription(offer))
+      .then(() => playerRef.set(
+        { offer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } },
+        { merge: true }
+      ))
+      .catch(() => {});
+
+    playerRef.onSnapshot(snap => {
+      const data = snap.data();
+      if(data && data.answer && !pc.currentRemoteDescription){
+        pc.setRemoteDescription(new RTCSessionDescription(data.answer)).catch(() => {});
+      }
+    });
+
+    clientCandidatesRef.onSnapshot(snap => {
+      snap.docChanges().forEach(change => {
+        if(change.type === 'added'){
+          pc.addIceCandidate(new RTCIceCandidate(change.doc.data())).catch(() => {});
+        }
+      });
+    });
   }
 
   function createPlatformsForLevel(level){
