@@ -359,9 +359,11 @@
     manager.on('move', (evt, data) => {
       if(!data || !data.vector) return;
       controlState.moveX = Math.max(-1, Math.min(1, data.vector.x));
+      scheduleSend();
     });
     manager.on('end', () => {
       controlState.moveX = 0;
+      scheduleSend(true); // envoi immédiat au relâchement, pour un arrêt net
     });
 
     const jumpBtn = document.getElementById('jump-btn');
@@ -369,19 +371,45 @@
       ev.preventDefault();
       controlState.jumpCount += 1;
       jumpBtn.classList.add('pressed');
+      scheduleSend(true); // le saut doit partir tout de suite, pas de throttle
     };
     jumpBtn.addEventListener('touchstart', triggerJump, { passive:false });
     jumpBtn.addEventListener('mousedown', triggerJump);
     jumpBtn.addEventListener('touchend', () => jumpBtn.classList.remove('pressed'));
     jumpBtn.addEventListener('mouseup', () => jumpBtn.classList.remove('pressed'));
 
-    // envoie régulièrement l'état de la manette à Firestore
-    setInterval(() => {
-      roomRef.collection('players').doc(deviceId).update({
-        moveX: controlState.moveX,
-        jumpCount: controlState.jumpCount
-      }).catch(() => {});
-    }, 80);
+    // filet de sécurité : renvoie l'état à intervalle régulier au cas où un
+    // événement se perdrait (perte réseau momentanée, etc.)
+    setInterval(() => scheduleSend(), 200);
+  }
+
+  // ==== Envoi throttlé (réactif) de l'état vers Firestore ====
+  const SEND_MIN_GAP = 40; // ms minimum entre deux envois "normaux"
+  let lastSendAt = 0;
+  let pendingTimeout = null;
+
+  function doSend(){
+    lastSendAt = Date.now();
+    const playerRef = roomRef.collection('players').doc(deviceId);
+    playerRef.update({
+      moveX: controlState.moveX,
+      jumpCount: controlState.jumpCount
+    }).catch(() => {});
+  }
+
+  function scheduleSend(immediate){
+    const now = Date.now();
+    if(immediate || now - lastSendAt >= SEND_MIN_GAP){
+      if(pendingTimeout){ clearTimeout(pendingTimeout); pendingTimeout = null; }
+      doSend();
+      return;
+    }
+    if(!pendingTimeout){
+      pendingTimeout = setTimeout(() => {
+        pendingTimeout = null;
+        doSend();
+      }, SEND_MIN_GAP - (now - lastSendAt));
+    }
   }
 
   async function requestWakeLock(){
