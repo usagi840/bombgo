@@ -110,12 +110,12 @@
     4: [ {x:100,y:450}, {x:320,y:450}, {x:480,y:450}, {x:700,y:450} ]
   };
 
-  // dude1/dude2 texture, avec une teinte pour différencier joueur 3 et 4
+  // un sprite dédié par joueur
   var PLAYER_VISUALS = [
-    { tex: 'dude1', tint: null },
-    { tex: 'dude2', tint: null },
-    { tex: 'dude1', tint: 0x88c8ff },
-    { tex: 'dude2', tint: 0xff9ecf }
+    { tex: 'dude1', suffix: '1' },
+    { tex: 'dude2', suffix: '2' },
+    { tex: 'dude3', suffix: '3' },
+    { tex: 'dude4', suffix: '4' }
   ];
 
   var platformLayouts = [
@@ -154,6 +154,8 @@
     this.load.image('tremplin','assets/tremplin.png');
     this.load.spritesheet('dude1', 'assets/personnage1.png', {frameWidth:320, frameHeight:480});
     this.load.spritesheet('dude2', 'assets/personnage2.png', {frameWidth:320, frameHeight:480});
+    this.load.spritesheet('dude3', 'assets/personnage3.png', {frameWidth:320, frameHeight:480});
+    this.load.spritesheet('dude4', 'assets/personnage4.png', {frameWidth:320, frameHeight:480});
   }
 
   function create(){
@@ -171,6 +173,14 @@
     this.anims.create({key:'turn2', frames:[{key:'dude2',frame:4}], frameRate:20});
     this.anims.create({key:'right2', frames:this.anims.generateFrameNumbers('dude2',{start:5,end:8}), frameRate:10, repeat:-1});
 
+    this.anims.create({key:'left3', frames:this.anims.generateFrameNumbers('dude3',{start:0,end:3}), frameRate:10, repeat:-1});
+    this.anims.create({key:'turn3', frames:[{key:'dude3',frame:4}], frameRate:20});
+    this.anims.create({key:'right3', frames:this.anims.generateFrameNumbers('dude3',{start:5,end:8}), frameRate:10, repeat:-1});
+
+    this.anims.create({key:'left4', frames:this.anims.generateFrameNumbers('dude4',{start:0,end:3}), frameRate:10, repeat:-1});
+    this.anims.create({key:'turn4', frames:[{key:'dude4',frame:4}], frameRate:20});
+    this.anims.create({key:'right4', frames:this.anims.generateFrameNumbers('dude4',{start:5,end:8}), frameRate:10, repeat:-1});
+
     stars = this.physics.add.group({key:'star', repeat:11, setXY:{x:12,y:0,stepX:70}});
     stars.children.iterate(c => { c.setBounceY(Phaser.Math.FloatBetween(0.4,0.8)); c.setScale(0.015); });
 
@@ -184,11 +194,10 @@
     players.forEach((p, idx) => {
       const visual = PLAYER_VISUALS[idx % PLAYER_VISUALS.length];
       const spawn = spawns[idx] || {x:400,y:450};
-      const animSuffix = visual.tex === 'dude1' ? '1' : '2';
+      const animSuffix = visual.suffix;
 
       const sprite = this.physics.add.sprite(spawn.x, spawn.y, visual.tex)
         .setScale(0.125).setBounce(0.2).setCollideWorldBounds(true);
-      if(visual.tint) sprite.setTint(visual.tint);
       sprite.setData('animSuffix', animSuffix);
 
       const isLeft = idx % 2 === 0;
