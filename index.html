@@ -255,12 +255,12 @@
 
         if(handledThisFrame || !justPressed) return;
 
-        if(joinStage === 'p1assign' && pad.id !== player2PadId){
-          player1PadId = pad.id;
+        if(joinStage === 'p1assign' && index !== player2Pad){
+          player1Pad = index;
           joinStage = 'p2assign';
           handledThisFrame = true;
-        } else if(joinStage === 'p2assign' && pad.id !== player1PadId){
-          player2PadId = pad.id;
+        } else if(joinStage === 'p2assign' && index !== player1Pad){
+          player2Pad = index;
           joinStage = 'done';
           joinScreen = false;
           handledThisFrame = true;
