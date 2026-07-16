@@ -63,7 +63,7 @@
   // Passe à true pour afficher en bas de l'écran les valeurs brutes des axes
   // et boutons de chaque manette connectée. Très utile pour régler
   // CONTROLS.forcedAxis / invertX ci-dessous si une manette se comporte mal.
-  var DEBUG_MODE = true;
+  var DEBUG_MODE = false;
 
   // ==== Configuration fixe des manettes (à ajuster ici directement) ====
   var JUMP_BUTTON = { player1: 12, player2: 2 };
@@ -83,12 +83,12 @@
 
   var joinScreen = true;
   var joinStage = 'p1assign';
-  // On retient l'identifiant unique de chaque manette (pad.id) plutôt que
-  // son numéro d'index. En Bluetooth, une manette peut se déconnecter une
-  // fraction de seconde et se reconnecter à un autre index : si on avait
-  // gardé l'index, le jeu se serait mis à lire la mauvaise manette (ou plus
-  // aucune). Avec l'id, on la retrouve à chaque frame quel que soit son index.
-  var player1PadId = null, player2PadId = null;
+  // Certains Joy-Con renvoient exactement le même "pad.id" pour les deux
+  // manettes (Chrome ne distingue pas toujours L et R). On ne peut donc pas
+  // s'appuyer sur l'id pour les différencier : on revient à leur position
+  // (index) dans la liste des manettes, qui elle est bien différente entre
+  // les deux (Pad0 / Pad1).
+  var player1Pad = null, player2Pad = null;
   var prevButtons = {};
 
   // ==== Layout des niveaux ====
@@ -193,12 +193,11 @@
 
       this.input.gamepad.on('disconnected', pad => {
         console.log('Manette déconnectée:', pad.index, pad.id);
-        // On ne réinitialise rien tout de suite : en Bluetooth une manette
-        // peut se "déconnecter" une fraction de seconde puis revenir toute
-        // seule (avec le même id). Comme on la retrouve par id dans
-        // update(), tout continue de fonctionner sans rien faire ici. On
-        // ne prévient le joueur que pour l'informer, sans casser la partie.
-        if(pad.id === player1PadId || pad.id === player2PadId){
+        // On ne réinitialise pas tout de suite l'écran de sélection : en
+        // Bluetooth une manette peut se "déconnecter" une fraction de
+        // seconde et revenir au même index tout de suite après. On informe
+        // juste le joueur, sans casser la partie pour une micro-coupure.
+        if(pad.index === player1Pad || pad.index === player2Pad){
           joinText.setText('Manette signalée déconnectée (reconnexion automatique en cours...)');
           this.time.delayedCall(600, () => { if(joinScreen === false) joinText.setText(''); });
         }
@@ -220,26 +219,14 @@
         return;
       }
 
-      const pad1 = findPadById(allPads, player1PadId);
-      const pad2 = findPadById(allPads, player2PadId);
+      const pad1 = allPads[player1Pad];
+      const pad2 = allPads[player2Pad];
 
       movePlayer(player1, pad1, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1, CONTROLS.player1);
       movePlayer(player2, pad2, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2, CONTROLS.player2);
     } catch(err) {
       console.error(err);
     }
-  }
-
-  // Retrouve la manette actuelle correspondant à un identifiant donné,
-  // quel que soit son index à ce moment précis. C'est ce qui garantit que
-  // Joueur 1 et Joueur 2 restent chacun sur LEUR manette, même si l'ordre
-  // ou les index changent suite à une micro-coupure Bluetooth.
-  function findPadById(allPads, id){
-    if(!id) return null;
-    for(let i = 0; i < allPads.length; i++){
-      if(allPads[i] && allPads[i].id === id) return allPads[i];
-    }
-    return null;
   }
 
   function updateDebugText(allPads){
