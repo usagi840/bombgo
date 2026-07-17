@@ -68,6 +68,17 @@
   // ==== Configuration fixe des manettes (à ajuster ici directement) ====
   var JUMP_BUTTON = { player1: 12, player2: 2 };
 
+  // ==== Mode Joy-Con combiné (Windows fusionne les 2 Joy-Con en 1 manette) ====
+  // Quand Windows fusionne les 2 Joy-Con, une seule manette arrive au
+  // navigateur mais elle contient EN RÉALITÉ les boutons/axes des deux
+  // côtés mélangés dans le même tableau. On peut donc lire cette manette
+  // unique et en extraire les deux joueurs séparément, sans rien installer.
+  // Ajuste ces numéros si besoin en repérant les bons index avec DEBUG_MODE.
+  var COMBINED_JOYCON = {
+    player1: { axisIndex: 0, jumpButton: 19, invertX: false }, // stick + bouton du Joy-Con gauche
+    player2: { axisIndex: 2, jumpButton: 21, invertX: false }  // stick + bouton du Joy-Con droit
+  };
+
   // ==== Réglages manuels si un joueur ne bouge pas ou va dans le mauvais sens ====
   // invertX: passe à true si ce joueur part dans le mauvais sens.
   // forcedAxis: par défaut on utilise l'axe 0 (stick gauche, mapping standard),
@@ -222,8 +233,26 @@
       const pad1 = allPads[player1Pad];
       const pad2 = allPads[player2Pad];
 
-      movePlayer(player1, pad1, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1, CONTROLS.player1);
-      movePlayer(player2, pad2, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2, CONTROLS.player2);
+      // Si les deux joueurs sont sur la même manette physique (cas des 2
+      // Joy-Con fusionnés par Windows en un seul objet), on utilise la
+      // config spéciale : axes et boutons différents pour chaque moitié,
+      // et pas de filet de secours croix directionnelle (ambigu dans ce cas).
+      const sameCombinedPad = (player1Pad !== null && player1Pad === player2Pad);
+
+      if(sameCombinedPad){
+        movePlayer(player1, pad1, 'left1', 'turn1', 'right1',
+          COMBINED_JOYCON.player1.jumpButton, COMBINED_JOYCON.player1.axisIndex,
+          COMBINED_JOYCON.player1.invertX, false);
+        movePlayer(player2, pad2, 'left2', 'turn2', 'right2',
+          COMBINED_JOYCON.player2.jumpButton, COMBINED_JOYCON.player2.axisIndex,
+          COMBINED_JOYCON.player2.invertX, false);
+      } else {
+        const axis1 = CONTROLS.player1.forcedAxis !== null ? CONTROLS.player1.forcedAxis : 0;
+        const axis2 = CONTROLS.player2.forcedAxis !== null ? CONTROLS.player2.forcedAxis : 0;
+
+        movePlayer(player1, pad1, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1, axis1, CONTROLS.player1.invertX, true);
+        movePlayer(player2, pad2, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2, axis2, CONTROLS.player2.invertX, true);
+      }
     } catch(err) {
       console.error(err);
     }
@@ -243,6 +272,7 @@
 
   function handleJoinScreen(allPads){
     let handledThisFrame = false;
+    const connectedCount = allPads.filter(p => p).length;
 
     allPads.forEach((pad, index) => {
       if(!pad) return;
@@ -256,10 +286,28 @@
         if(handledThisFrame || !justPressed) return;
 
         if(joinStage === 'p1assign' && index !== player2Pad){
+          // S'il n'y a qu'une seule manette physique connectée, elle devra
+          // servir aux deux joueurs (cas Joy-Con fusionnés) : dans ce cas
+          // on exige précisément le bouton 19 pour le Joueur 1, afin de
+          // laisser le bouton 21 libre pour le Joueur 2 sur cette même
+          // manette. S'il y a 2 manettes séparées, n'importe quel bouton
+          // convient comme avant.
+          if(connectedCount === 1 && btnIndex !== 19) return;
+
           player1Pad = index;
           joinStage = 'p2assign';
           handledThisFrame = true;
-        } else if(joinStage === 'p2assign' && index !== player1Pad){
+        } else if(joinStage === 'p2assign'){
+          const sameCombinedPad = (index === player1Pad);
+
+          // Sur la même manette physique que le Joueur 1, seul le bouton 21
+          // assigne le Joueur 2 (on ignore tous les autres, y compris celui
+          // déjà utilisé par le Joueur 1).
+          if(sameCombinedPad && btnIndex !== 21) return;
+
+          // Sur une manette différente, n'importe quel bouton convient.
+          if(!sameCombinedPad && index === player1Pad) return; // sécurité (ne devrait pas arriver)
+
           player2Pad = index;
           joinStage = 'done';
           joinScreen = false;
@@ -269,33 +317,35 @@
     });
 
     const messages = {
-      p1assign: 'Joueur 1 : appuie sur un bouton pour rejoindre',
-      p2assign: 'Joueur 2 : appuie sur un bouton pour rejoindre'
+      p1assign: (connectedCount === 1)
+        ? 'Joueur 1 : appuie sur le bouton 19 pour rejoindre'
+        : 'Joueur 1 : appuie sur un bouton pour rejoindre',
+      p2assign: (player1Pad !== null && allPads.filter(p=>p).length === 1)
+        ? 'Joueur 2 : appuie sur le bouton 21 pour rejoindre'
+        : 'Joueur 2 : appuie sur un bouton pour rejoindre'
     };
     joinText.setText(messages[joinStage] || '');
     if(joinStage === 'done') joinText.setText('');
   }
 
-  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex, controlConfig){
+  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex, stickAxisIndex, invertX, useDpadFallback){
     if(!pad) return;
 
     const deadzone = 0.25;
     let moveX = 0;
 
-    // Mapping standard : axe 0 = stick gauche horizontal. On peut forcer un
-    // autre numéro d'axe via CONTROLS si une manette a un mapping différent.
-    const stickAxisIndex = (controlConfig.forcedAxis !== null) ? controlConfig.forcedAxis : 0;
     const axis = pad.axes[stickAxisIndex];
-
     if(axis !== undefined){
       moveX = Math.abs(axis.value) > deadzone ? axis.value : 0;
     }
 
-    if(controlConfig.invertX) moveX = -moveX;
+    if(invertX) moveX = -moveX;
 
-    // Filet de sécurité : si le stick ne donne rien, on essaie la croix
-    // directionnelle via les boutons standards 14 (gauche) et 15 (droite).
-    if(moveX === 0 && pad.buttons[14] && pad.buttons[15]){
+    // Filet de sécurité : croix directionnelle via boutons 14/15. Désactivé
+    // en mode Joy-Con combiné (useDpadFallback=false) car dans une manette
+    // fusionnée on ne sait pas de façon fiable à quel côté ces boutons
+    // appartiennent, ça risquerait de faire bouger le mauvais joueur.
+    if(useDpadFallback && moveX === 0 && pad.buttons[14] && pad.buttons[15]){
       if(pad.buttons[14].pressed) moveX = -1;
       else if(pad.buttons[15].pressed) moveX = 1;
     }
