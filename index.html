@@ -5,10 +5,8 @@
   <title>Solo</title>
   <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
 
-  <!-- Phaser -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
 
-  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
@@ -23,7 +21,6 @@
     }
     canvas { border: 4px solid #291515; }
 
-    /* Les icônes en haut */
     .icon { cursor:pointer; width:105px; position:fixed; top:10px; }
     .icon.home { left:10px; }
     .icon.retour { left:125px; }
@@ -35,7 +32,6 @@
   <div id="game-wrapper"></div>
 
 <script>
-  // ==== Firebase ====
   firebase.initializeApp({
     apiKey: "AIzaSyBnQb5b5h62Jl4WeiKEBMeEmivbOK-B70k",
     authDomain: "bombgo-classement.firebaseapp.com",
@@ -44,13 +40,11 @@
   });
   const db = firebase.firestore();
 
-  // ==== Device ID pour score unique ====
   let deviceId = localStorage.getItem("deviceId");
   if(!deviceId){ deviceId = crypto.randomUUID(); localStorage.setItem("deviceId", deviceId); }
 
   let playerNickname = localStorage.getItem("playerNickname") || "player";
 
-  // ==== Variables globales ====
   var player1, player2, cursors, stars, bombs, platforms, joinText, debugText;
   var score1 = 0, score2 = 0, scoreText1, scoreText2;
   var gameOver = false;
@@ -59,38 +53,15 @@
   var tremplin = null;
   var scoreEffect1, scoreEffect2;
 
-  // ==== Mode debug ====
-  // Passe à true pour afficher en bas de l'écran les valeurs brutes des axes
-  // et boutons de chaque manette connectée. Très utile pour régler
-  // CONTROLS.forcedAxis / invertX ci-dessous si une manette se comporte mal.
   var DEBUG_MODE = false;
 
-  // ==== Configuration fixe des manettes (à ajuster ici directement) ====
   var JUMP_BUTTON = { player1: 12, player2: 2 };
 
-  // ==== Mode Joy-Con combiné (Windows fusionne les 2 Joy-Con en 1 manette) ====
-  // Quand Windows fusionne les 2 Joy-Con, une seule manette arrive au
-  // navigateur mais elle contient EN RÉALITÉ les boutons/axes des deux
-  // côtés mélangés dans le même tableau. On peut donc lire cette manette
-  // unique et en extraire les deux joueurs séparément, sans rien installer.
-  // Chaque Joy-Con est tenu seul à l'horizontale (façon Mario Party), donc
-  // son stick est tourné de 90° par rapport à une manette normale : on lit
-  // l'axe Y (1 et 3) au lieu de l'axe X (0 et 2) pour que pousser le stick
-  // sur le côté fasse bien avancer le personnage à gauche/droite.
-  // Si un joueur part dans le mauvais sens, passe son invertX à true.
   var COMBINED_JOYCON = {
-    player1: { axisIndex: 1, jumpButton: 19, invertX: false }, // stick + bouton du Joy-Con gauche
-    player2: { axisIndex: 3, jumpButton: 21, invertX: false }  // stick + bouton du Joy-Con droit
+    player1: { axisIndex: 1, jumpButton: 19, invertX: false },
+    player2: { axisIndex: 3, jumpButton: 21, invertX: true }
   };
 
-  // ==== Réglages manuels si un joueur ne bouge pas ou va dans le mauvais sens ====
-  // invertX: passe à true si ce joueur part dans le mauvais sens.
-  // forcedAxis: par défaut on utilise l'axe 0 (stick gauche, mapping standard),
-  // ce qui marche pour l'immense majorité des manettes. Si une manette précise
-  // ne fonctionne toujours pas, passe DEBUG_MODE à true, regarde le texte en
-  // bas de l'écran, bouge le stick à gauche/droite et repère quel numéro
-  // d'axe change vraiment (en ignorant les axes de gâchettes qui bougent
-  // aussi mais ne devraient pas). Mets ce numéro ici (ex: 3).
   var CONTROLS = {
     player1: { invertX: false, forcedAxis: null },
     player2: { invertX: false, forcedAxis: null }
@@ -98,15 +69,9 @@
 
   var joinScreen = true;
   var joinStage = 'p1assign';
-  // Certains Joy-Con renvoient exactement le même "pad.id" pour les deux
-  // manettes (Chrome ne distingue pas toujours L et R). On ne peut donc pas
-  // s'appuyer sur l'id pour les différencier : on revient à leur position
-  // (index) dans la liste des manettes, qui elle est bien différente entre
-  // les deux (Pad0 / Pad1).
   var player1Pad = null, player2Pad = null;
   var prevButtons = {};
 
-  // ==== Layout des niveaux ====
   var platformLayouts = [
     [{x:600,y:400},{x:50,y:250},{x:750,y:220}],
     [{x:150,y:350},{x:400,y:200},{x:650,y:300},{x:400,y:470}],
@@ -120,7 +85,6 @@
     [{x:100,y:500},{x:300,y:350},{x:500,y:200},{x:700,y:100}]
   ];
 
-  // ==== Config Phaser ====
   var config = {
     type: Phaser.AUTO,
     width: 800,
@@ -198,10 +162,6 @@
     this.physics.add.collider(player2, bombs, hitBomb, null, this);
     this.physics.add.collider(player1, player2);
 
-    // ==== Gestion propre des connexions/déconnexions de manette ====
-    // Évite le bug où une manette débranchée puis rebranchée (ou une autre
-    // manette branchée à la place) garde un ancien index qui ne correspond
-    // plus à rien : on remet proprement l'écran de sélection.
     if(this.input.gamepad){
       this.input.gamepad.on('connected', pad => {
         console.log('Manette connectée:', pad.index, pad.id);
@@ -209,10 +169,6 @@
 
       this.input.gamepad.on('disconnected', pad => {
         console.log('Manette déconnectée:', pad.index, pad.id);
-        // On ne réinitialise pas tout de suite l'écran de sélection : en
-        // Bluetooth une manette peut se "déconnecter" une fraction de
-        // seconde et revenir au même index tout de suite après. On informe
-        // juste le joueur, sans casser la partie pour une micro-coupure.
         if(pad.index === player1Pad || pad.index === player2Pad){
           joinText.setText('Manette signalée déconnectée (reconnexion automatique en cours...)');
           this.time.delayedCall(600, () => { if(joinScreen === false) joinText.setText(''); });
@@ -238,10 +194,6 @@
       const pad1 = allPads[player1Pad];
       const pad2 = allPads[player2Pad];
 
-      // Si les deux joueurs sont sur la même manette physique (cas des 2
-      // Joy-Con fusionnés par Windows en un seul objet), on utilise la
-      // config spéciale : axes et boutons différents pour chaque moitié,
-      // et pas de filet de secours croix directionnelle (ambigu dans ce cas).
       const sameCombinedPad = (player1Pad !== null && player1Pad === player2Pad);
 
       if(sameCombinedPad){
@@ -291,12 +243,6 @@
         if(handledThisFrame || !justPressed) return;
 
         if(joinStage === 'p1assign' && index !== player2Pad){
-          // S'il n'y a qu'une seule manette physique connectée, elle devra
-          // servir aux deux joueurs (cas Joy-Con fusionnés) : dans ce cas
-          // on exige précisément le bouton 19 pour le Joueur 1, afin de
-          // laisser le bouton 21 libre pour le Joueur 2 sur cette même
-          // manette. S'il y a 2 manettes séparées, n'importe quel bouton
-          // convient comme avant.
           if(connectedCount === 1 && btnIndex !== 19) return;
 
           player1Pad = index;
@@ -305,13 +251,9 @@
         } else if(joinStage === 'p2assign'){
           const sameCombinedPad = (index === player1Pad);
 
-          // Sur la même manette physique que le Joueur 1, seul le bouton 21
-          // assigne le Joueur 2 (on ignore tous les autres, y compris celui
-          // déjà utilisé par le Joueur 1).
           if(sameCombinedPad && btnIndex !== 21) return;
 
-          // Sur une manette différente, n'importe quel bouton convient.
-          if(!sameCombinedPad && index === player1Pad) return; // sécurité (ne devrait pas arriver)
+          if(!sameCombinedPad && index === player1Pad) return;
 
           player2Pad = index;
           joinStage = 'done';
@@ -346,10 +288,6 @@
 
     if(invertX) moveX = -moveX;
 
-    // Filet de sécurité : croix directionnelle via boutons 14/15. Désactivé
-    // en mode Joy-Con combiné (useDpadFallback=false) car dans une manette
-    // fusionnée on ne sait pas de façon fiable à quel côté ces boutons
-    // appartiennent, ça risquerait de faire bouger le mauvais joueur.
     if(useDpadFallback && moveX === 0 && pad.buttons[14] && pad.buttons[15]){
       if(pad.buttons[14].pressed) moveX = -1;
       else if(pad.buttons[15].pressed) moveX = 1;
@@ -366,10 +304,6 @@
       player.anims.play(turnAnim);
     }
 
-    // Saut : uniquement le bouton dédié à ce joueur, pas n'importe quel
-    // bouton (l'ancien code sautait aussi quand on utilisait la croix
-    // directionnelle pour se déplacer, ce qui donnait un comportement
-    // imprévisible selon la manette).
     const jumpBtn = pad.buttons[jumpButtonIndex];
     if(jumpBtn && jumpBtn.pressed && player.body.touching.down){
       player.setVelocityY(-330);
@@ -415,10 +349,6 @@
     }
 }
 
-  // NB : fonction non appelée actuellement ailleurs dans le fichier.
-  // Corrigée pour utiliser le score combiné des deux joueurs (l'ancienne
-  // version référençait une variable "score" qui n'existe plus depuis le
-  // passage à deux joueurs).
   function saveScore() {
     const ref = db.collection("scores").doc(deviceId);
     const totalScore = score1 + score2;
