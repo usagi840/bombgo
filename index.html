@@ -73,10 +73,14 @@
   // navigateur mais elle contient EN RÉALITÉ les boutons/axes des deux
   // côtés mélangés dans le même tableau. On peut donc lire cette manette
   // unique et en extraire les deux joueurs séparément, sans rien installer.
-  // Ajuste ces numéros si besoin en repérant les bons index avec DEBUG_MODE.
+  // Chaque Joy-Con est tenu seul à l'horizontale (façon Mario Party), donc
+  // son stick est tourné de 90° par rapport à une manette normale : on lit
+  // l'axe Y (1 et 3) au lieu de l'axe X (0 et 2) pour que pousser le stick
+  // sur le côté fasse bien avancer le personnage à gauche/droite.
+  // Si un joueur part dans le mauvais sens, passe son invertX à true.
   var COMBINED_JOYCON = {
-    player1: { axisIndex: 0, jumpButton: 19, invertX: false }, // stick + bouton du Joy-Con gauche
-    player2: { axisIndex: 2, jumpButton: 21, invertX: false }  // stick + bouton du Joy-Con droit
+    player1: { axisIndex: 1, jumpButton: 19, invertX: false }, // stick + bouton du Joy-Con gauche
+    player2: { axisIndex: 3, jumpButton: 21, invertX: false }  // stick + bouton du Joy-Con droit
   };
 
   // ==== Réglages manuels si un joueur ne bouge pas ou va dans le mauvais sens ====
