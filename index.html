@@ -68,17 +68,6 @@
   // ==== Configuration fixe des manettes (à ajuster ici directement) ====
   var JUMP_BUTTON = { player1: 12, player2: 2 };
 
-  // ==== Mode Joy-Con combiné (Windows fusionne les 2 Joy-Con en 1 manette) ====
-  // Quand Windows fusionne les 2 Joy-Con, une seule manette arrive au
-  // navigateur mais elle contient EN RÉALITÉ les boutons/axes des deux
-  // côtés mélangés dans le même tableau. On peut donc lire cette manette
-  // unique et en extraire les deux joueurs séparément, sans rien installer.
-  // Ajuste ces numéros si besoin en repérant les bons index avec DEBUG_MODE.
-  var COMBINED_JOYCON = {
-    player1: { axisIndex: 0, jumpButton: 19, invertX: false }, // stick + bouton du Joy-Con gauche
-    player2: { axisIndex: 2, jumpButton: 21, invertX: false }  // stick + bouton du Joy-Con droit
-  };
-
   // ==== Réglages manuels si un joueur ne bouge pas ou va dans le mauvais sens ====
   // invertX: passe à true si ce joueur part dans le mauvais sens.
   // forcedAxis: par défaut on utilise l'axe 0 (stick gauche, mapping standard),
@@ -222,31 +211,8 @@
     try {
       const gp = this.input.gamepad;
       const allPads = gp ? gp.gamepads : [];
-      const connectedPads = allPads.filter(p => p);
 
       if(DEBUG_MODE) updateDebugText(allPads);
-
-      // Cas Joy-Con fusionné par Windows : une seule manette détectée, mais
-      // qui contient en réalité les données des deux Joy-Con. On saute
-      // complètement l'écran de sélection (il n'y a rien à choisir, il n'y
-      // a qu'un seul objet manette) et on lit directement les deux joueurs
-      // dedans.
-      const combinedPad = connectedPads.length === 1 && isCombinedJoyCon(connectedPads[0])
-        ? connectedPads[0] : null;
-
-      if(combinedPad){
-        if(joinScreen){
-          joinScreen = false;
-          joinText.setText('');
-        }
-        movePlayer(player1, combinedPad, 'left1', 'turn1', 'right1',
-          COMBINED_JOYCON.player1.jumpButton, COMBINED_JOYCON.player1.axisIndex,
-          COMBINED_JOYCON.player1.invertX, false);
-        movePlayer(player2, combinedPad, 'left2', 'turn2', 'right2',
-          COMBINED_JOYCON.player2.jumpButton, COMBINED_JOYCON.player2.axisIndex,
-          COMBINED_JOYCON.player2.invertX, false);
-        return;
-      }
 
       if(joinScreen){
         handleJoinScreen.call(this, allPads);
@@ -256,23 +222,11 @@
       const pad1 = allPads[player1Pad];
       const pad2 = allPads[player2Pad];
 
-      const axis1 = CONTROLS.player1.forcedAxis !== null ? CONTROLS.player1.forcedAxis : 0;
-      const axis2 = CONTROLS.player2.forcedAxis !== null ? CONTROLS.player2.forcedAxis : 0;
-
-      movePlayer(player1, pad1, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1, axis1, CONTROLS.player1.invertX, true);
-      movePlayer(player2, pad2, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2, axis2, CONTROLS.player2.invertX, true);
+      movePlayer(player1, pad1, 'left1', 'turn1', 'right1', JUMP_BUTTON.player1, CONTROLS.player1);
+      movePlayer(player2, pad2, 'left2', 'turn2', 'right2', JUMP_BUTTON.player2, CONTROLS.player2);
     } catch(err) {
       console.error(err);
     }
-  }
-
-  // Détecte le cas où Windows a fusionné les deux Joy-Con en une seule
-  // manette virtuelle (nom du type "Joy-Con L+R" ou "Joy-Con (L/R)").
-  function isCombinedJoyCon(pad){
-    if(!pad || !pad.id) return false;
-    const id = pad.id.toLowerCase();
-    return id.includes('joy-con') && (id.includes('l+r') || id.includes('l/r'));
-  }
   }
 
   function updateDebugText(allPads){
@@ -322,24 +276,26 @@
     if(joinStage === 'done') joinText.setText('');
   }
 
-  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex, stickAxisIndex, invertX, useDpadFallback){
+  function movePlayer(player, pad, leftAnim, turnAnim, rightAnim, jumpButtonIndex, controlConfig){
     if(!pad) return;
 
     const deadzone = 0.25;
     let moveX = 0;
 
+    // Mapping standard : axe 0 = stick gauche horizontal. On peut forcer un
+    // autre numéro d'axe via CONTROLS si une manette a un mapping différent.
+    const stickAxisIndex = (controlConfig.forcedAxis !== null) ? controlConfig.forcedAxis : 0;
     const axis = pad.axes[stickAxisIndex];
+
     if(axis !== undefined){
       moveX = Math.abs(axis.value) > deadzone ? axis.value : 0;
     }
 
-    if(invertX) moveX = -moveX;
+    if(controlConfig.invertX) moveX = -moveX;
 
-    // Filet de sécurité : croix directionnelle via boutons 14/15. Désactivé
-    // en mode Joy-Con combiné (useDpadFallback=false) car dans une manette
-    // fusionnée on ne sait pas de façon fiable à quel côté ces boutons
-    // appartiennent, ça risquerait de faire bouger le mauvais joueur.
-    if(useDpadFallback && moveX === 0 && pad.buttons[14] && pad.buttons[15]){
+    // Filet de sécurité : si le stick ne donne rien, on essaie la croix
+    // directionnelle via les boutons standards 14 (gauche) et 15 (droite).
+    if(moveX === 0 && pad.buttons[14] && pad.buttons[15]){
       if(pad.buttons[14].pressed) moveX = -1;
       else if(pad.buttons[15].pressed) moveX = 1;
     }
