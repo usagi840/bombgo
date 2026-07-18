@@ -270,6 +270,7 @@
     this.physics.add.overlap(player2, stars, collectStar, null, this);
     this.physics.add.collider(player1, bombs, hitBomb, null, this);
     this.physics.add.collider(player2, bombs, hitBomb, null, this);
+    this.physics.add.collider(player1, player2);
 
     // ==== Gestion propre des connexions/déconnexions de manette ====
     // Évite le bug où une manette débranchée puis rebranchée (ou une autre
