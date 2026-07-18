@@ -109,6 +109,9 @@
         <div class="status" id="status2"></div>
       </div>
     </div>
+    <div id="bottom-bar">
+      <div id="controller-hint"></div>
+    </div>
   </div>
 
 <script>
@@ -177,7 +180,7 @@
      && typeof savedConfig.player1.padIndex === 'number'
      && typeof savedConfig.player2.padIndex === 'number'){
 
-    document.getElementById('controller-hint').textContent = 'Ou appuie sur ton bouton (SR) pour rejouer directement';
+    document.getElementById('controller-hint').textContent = 'appuie sur un bouton SR pour rejouer directement';
 
     let prevButtons = {};
     let replaying = false;
