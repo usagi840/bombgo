@@ -534,17 +534,17 @@
     bomb.disableBody(true,true);
 
     if(player === player1){
-        score1 = Math.max(0, score1 - 20);
+        score1 = Math.max(0, score1 - 50);
         scoreText1.setText(player1Pseudo+': ' + score1);
 
-        scoreEffect1.setText("-20");
+        scoreEffect1.setText("-50");
         setTimeout(() => scoreEffect1.setText(""), 1000);
 
     } else {
-        score2 = Math.max(0, score2 - 20);
+        score2 = Math.max(0, score2 - 50);
         scoreText2.setText(player2Pseudo+': ' + score2);
 
-        scoreEffect2.setText("-20");
+        scoreEffect2.setText("-50");
         setTimeout(() => scoreEffect2.setText(""), 1000);
     }
 }
