@@ -28,7 +28,7 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      justify-content: flex-end;
+      justify-content: center;
       align-items: center;
       transition: background-color 0.3s;
       position: relative;
@@ -39,10 +39,9 @@
     .half.draw { background-color: #8a8a2e; }
 
     .char-img {
-      max-height: 320px;
-      max-width: 90%;
+      max-height: 280px;
+      max-width: 85%;
       object-fit: contain;
-      margin-top: auto;
       filter: drop-shadow(3px 4px 3px rgba(0,0,0,0.35));
     }
 
@@ -69,26 +68,13 @@
       height: 70px;
       background-color: #291515;
       display: flex;
-      flex-direction: column;
       justify-content: center;
       align-items: center;
-      gap: 4px;
-    }
-    #bottom-bar button {
-      font-size: 18px;
-      padding: 8px 24px;
-      cursor: pointer;
-      border: none;
-      border-radius: 6px;
-      background-color: #f2d16b;
-      font-weight: bold;
-    }
-    #bottom-bar button:hover {
-      background-color: #e0bd50;
     }
     #controller-hint {
-      font-size: 12px;
-      color: #ccc;
+      font-size: 16px;
+      color: #f2d16b;
+      font-weight: bold;
     }
   </style>
 </head>
@@ -110,7 +96,7 @@
       </div>
     </div>
     <div id="bottom-bar">
-      <div id="controller-hint"></div>
+      <div id="controller-hint">SR pour rejouer...</div>
     </div>
   </div>
 
@@ -165,10 +151,9 @@
   function replay(){
     window.location.href = 'solo.html';
   }
-  document.getElementById('replay-btn').addEventListener('click', replay);
 
-  // ==== Rejouer directement à la manette (bouton 19/21, ou le bouton de
-  // saut configuré pour chaque joueur) ====
+  // ==== Rejouer à la manette (bouton 19/21, ou le bouton de saut
+  // configuré pour chaque joueur) ====
   let savedConfig = null;
   try {
     savedConfig = JSON.parse(localStorage.getItem('joyconGameConfig'));
@@ -179,8 +164,6 @@
   if(savedConfig && savedConfig.player1 && savedConfig.player2
      && typeof savedConfig.player1.padIndex === 'number'
      && typeof savedConfig.player2.padIndex === 'number'){
-
-    document.getElementById('controller-hint').textContent = 'appuie sur un bouton SR pour rejouer directement';
 
     let prevButtons = {};
     let replaying = false;
