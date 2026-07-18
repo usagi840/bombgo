@@ -486,61 +486,6 @@
       player.setVelocityY(-330);
     }
   }
-
-  function pixelPerfectCollision(sprite1, sprite2) {
-
-    // Vérification rapide
-    if (!Phaser.Geom.Intersects.RectangleToRectangle(
-        sprite1.getBounds(),
-        sprite2.getBounds()
-    )) {
-        return false;
-    }
-
-    // Zone de recouvrement
-    const overlap = Phaser.Geom.Rectangle.Intersection(
-        sprite1.getBounds(),
-        sprite2.getBounds()
-    );
-
-    const tex1 = sprite1.texture.getSourceImage();
-    const tex2 = sprite2.texture.getSourceImage();
-
-    const canvas1 = document.createElement("canvas");
-    canvas1.width = tex1.width;
-    canvas1.height = tex1.height;
-    const ctx1 = canvas1.getContext("2d");
-    ctx1.drawImage(tex1, 0, 0);
-
-    const canvas2 = document.createElement("canvas");
-    canvas2.width = tex2.width;
-    canvas2.height = tex2.height;
-    const ctx2 = canvas2.getContext("2d");
-    ctx2.drawImage(tex2, 0, 0);
-
-    const data1 = ctx1.getImageData(0, 0, tex1.width, tex1.height).data;
-    const data2 = ctx2.getImageData(0, 0, tex2.width, tex2.height).data;
-
-    for (let y = overlap.y; y < overlap.bottom; y++) {
-        for (let x = overlap.x; x < overlap.right; x++) {
-
-            const x1 = Math.floor((x - sprite1.x + sprite1.displayWidth / 2));
-            const y1 = Math.floor((y - sprite1.y + sprite1.displayHeight / 2));
-
-            const x2 = Math.floor((x - sprite2.x + sprite2.displayWidth / 2));
-            const y2 = Math.floor((y - sprite2.y + sprite2.displayHeight / 2));
-
-            const a1 = data1[(y1 * tex1.width + x1) * 4 + 3];
-            const a2 = data2[(y2 * tex2.width + x2) * 4 + 3];
-
-            if (a1 > 0 && a2 > 0) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
   
   function collectStar(player, star){
     star.disableBody(true,true);
