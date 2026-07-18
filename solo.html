@@ -16,11 +16,16 @@
     body {
       margin: 0;
       background-color: #413d3d;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
       overflow: hidden;
     }
     #game-wrapper {
-      width: 100vw;
-      height: 100vh;
+      width: 800px;
+      height: 600px;
+      flex-shrink: 0;
     }
     canvas { border: 4px solid #291515; }
 
@@ -36,6 +41,22 @@
   <div id="game-wrapper"></div>
 
 <script>
+  // ==== Mise à l'échelle du canevas 800x600 pour remplir l'écran ====
+  // Le canevas Phaser garde une taille interne fixe (800x600) ; on
+  // l'agrandit visuellement via CSS pour qu'il touche soit la hauteur,
+  // soit la largeur de la fenêtre, tout en restant cadré et centré.
+  (function(){
+    function fitWrapper(){
+      const wrapper = document.getElementById('game-wrapper');
+      if(!wrapper) return;
+      const scale = Math.min(window.innerWidth / 800, window.innerHeight / 600);
+      wrapper.style.transform = 'scale(' + scale + ')';
+    }
+    window.addEventListener('resize', fitWrapper);
+    window.addEventListener('load', fitWrapper);
+    fitWrapper();
+  })();
+
   // ==== Firebase ====
   firebase.initializeApp({
     apiKey: "AIzaSyBnQb5b5h62Jl4WeiKEBMeEmivbOK-B70k",
@@ -148,16 +169,7 @@
     type: Phaser.AUTO,
     width: 800,
     height: 600,
-    // Le canevas grandit pour remplir soit la hauteur, soit la largeur de
-    // la fenêtre (celle qui est limitante), en gardant toujours ses
-    // proportions 800x600 et en restant centré.
-    scale: {
-      mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH,
-      width: 800,
-      height: 600,
-      parent: 'game-wrapper'
-    },
+    parent: 'game-wrapper',
     physics: { default: 'arcade', arcade: { gravity:{y:300}, debug:false } },
     input: { gamepad: true },
     scene: { preload, create, update }
