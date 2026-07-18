@@ -20,47 +20,50 @@
       background-color: #7ec4cf;
       display: flex;
       flex-direction: column;
+      box-sizing: border-box;
+      overflow: hidden;
     }
     h1 {
       text-align: center;
       color: #291515;
-      margin: 12px 0 4px;
-      font-size: 26px;
+      margin: 8px 0 2px;
+      font-size: 20px;
     }
     #columns {
       display: flex;
       flex: 1;
-      gap: 16px;
-      padding: 0 16px 16px;
+      gap: 14px;
+      padding: 8px 14px;
       box-sizing: border-box;
+      min-height: 0;
     }
     .player-column {
       flex: 1;
       background-color: rgba(255,255,255,0.55);
       border-radius: 10px;
-      padding: 14px;
+      padding: 10px;
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
     .player-title {
-      font-size: 20px;
+      font-size: 17px;
       font-weight: bold;
       color: #291515;
     }
     .connect-status {
-      font-size: 14px;
+      font-size: 13px;
       color: #291515;
       text-align: center;
-      min-height: 40px;
+      min-height: 28px;
       display: flex;
       align-items: center;
       justify-content: center;
       background: rgba(0,0,0,0.06);
       border-radius: 6px;
-      padding: 6px 8px;
+      padding: 4px 8px;
       width: 100%;
       box-sizing: border-box;
     }
@@ -68,29 +71,34 @@
       background: rgba(46,139,46,0.25);
       font-weight: bold;
     }
+    .connect-status.ready {
+      background: rgba(46,139,46,0.55);
+    }
     input[type="text"] {
       width: 100%;
       box-sizing: border-box;
-      padding: 8px;
-      font-size: 16px;
+      padding: 6px;
+      font-size: 14px;
       border-radius: 6px;
       border: 1px solid #999;
       text-align: center;
     }
     .skin-picker {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      gap: 6px;
       width: 100%;
     }
     .skin-thumb {
-      width: 100%;
-      aspect-ratio: 320 / 480;
+      width: 62px;
+      height: 84px;
+      flex: 0 0 auto;
       background-repeat: no-repeat;
       background-position: 0 0;
-      background-size: auto 100%;
+      background-size: auto 84px;
       border: 3px solid transparent;
-      border-radius: 8px;
+      border-radius: 6px;
       cursor: pointer;
       background-color: rgba(255,255,255,0.6);
       overflow: hidden;
@@ -101,17 +109,24 @@
     .skin-thumb.selected {
       border-color: #2e8b2e;
     }
+    .hint {
+      font-size: 11px;
+      color: #291515;
+      opacity: 0.75;
+      text-align: center;
+    }
     #bottom-bar {
-      height: 64px;
+      height: 56px;
       background-color: #291515;
       display: flex;
       justify-content: center;
       align-items: center;
       gap: 20px;
+      flex: 0 0 auto;
     }
     #play-btn {
-      font-size: 20px;
-      padding: 10px 32px;
+      font-size: 18px;
+      padding: 8px 28px;
       cursor: pointer;
       border: none;
       border-radius: 6px;
@@ -138,12 +153,14 @@
         <div class="connect-status" id="status1">Appuie sur SR pour te connecter</div>
         <input type="text" id="pseudo1" maxlength="16" placeholder="Ton pseudo">
         <div class="skin-picker" id="skins1"></div>
+        <div class="hint">Stick ← → pour changer de skin, ton bouton SR pour valider / lancer</div>
       </div>
       <div class="player-column">
         <div class="player-title">Joueur 2</div>
         <div class="connect-status" id="status2">Appuie sur SR pour te connecter</div>
         <input type="text" id="pseudo2" maxlength="16" placeholder="Ton pseudo">
         <div class="skin-picker" id="skins2"></div>
+        <div class="hint">Stick ← → pour changer de skin, ton bouton SR pour valider / lancer</div>
       </div>
     </div>
     <div id="bottom-bar">
@@ -153,21 +170,22 @@
 
 <script>
   // ==== État ====
-  // padIndex: à quel index (dans navigator.getGamepads()) se trouve la
-  // manette de ce joueur. axisIndex/jumpButton/invertX/useDpadFallback:
-  // les réglages de mouvement à utiliser une fois en jeu (repris tels
-  // quels par solo.html).
   const state = {
-    player1: { connected: false, padIndex: null, axisIndex: 0, jumpButton: 12, invertX: false, useDpadFallback: true, pseudo: '', skin: 1 },
-    player2: { connected: false, padIndex: null, axisIndex: 0, jumpButton: 2, invertX: false, useDpadFallback: true, pseudo: '', skin: 2 }
+    player1: { connected: false, ready: false, padIndex: null, axisIndex: 0, jumpButton: 12, invertX: false, useDpadFallback: true, pseudo: '', skin: 1 },
+    player2: { connected: false, ready: false, padIndex: null, axisIndex: 0, jumpButton: 2,  invertX: false, useDpadFallback: true, pseudo: '', skin: 2 }
   };
 
-  let joinStage = 'p1assign'; // 'p1assign' -> 'p2assign' -> 'done'
   let prevButtons = {};
+  let launching = false;
+  const axisTapState = {
+    player1: { pos: false, neg: false },
+    player2: { pos: false, neg: false }
+  };
 
-  // ==== Pseudos : on reprend ceux sauvegardés la dernière fois, sinon vide ====
-  const savedPseudo1 = localStorage.getItem('player1Pseudo') || '';
-  const savedPseudo2 = localStorage.getItem('player2Pseudo') || '';
+  // ==== Pseudos : "Joueur 1"/"Joueur 2" pré-remplis par défaut, ou ceux
+  // sauvegardés la dernière fois si présents. Toujours modifiables. ====
+  const savedPseudo1 = localStorage.getItem('player1Pseudo') || 'Joueur 1';
+  const savedPseudo2 = localStorage.getItem('player2Pseudo') || 'Joueur 2';
   document.getElementById('pseudo1').value = savedPseudo1;
   document.getElementById('pseudo2').value = savedPseudo2;
   state.player1.pseudo = savedPseudo1;
@@ -182,7 +200,7 @@
     localStorage.setItem('player2Pseudo', e.target.value);
   });
 
-  // ==== Sélecteur de skins (4 vignettes par joueur) ====
+  // ==== Sélecteur de skins (4 vignettes par joueur, cliquables ou via stick) ====
   const savedSkin1 = parseInt(localStorage.getItem('player1Skin'), 10) || 1;
   const savedSkin2 = parseInt(localStorage.getItem('player2Skin'), 10) || 2;
   state.player1.skin = savedSkin1;
@@ -195,42 +213,73 @@
       thumb.className = 'skin-thumb' + (i === defaultSkin ? ' selected' : '');
       thumb.style.backgroundImage = "url('assets/personnage" + i + ".png')";
       thumb.dataset.skin = i;
-      thumb.addEventListener('click', () => {
-        state[playerKey].skin = i;
-        localStorage.setItem(playerKey + 'Skin', i);
-        container.querySelectorAll('.skin-thumb').forEach(t => t.classList.remove('selected'));
-        thumb.classList.add('selected');
-      });
+      thumb.addEventListener('click', () => setSkin(playerKey, i));
       container.appendChild(thumb);
     }
   }
   buildSkinPicker('skins1', 'player1', savedSkin1);
   buildSkinPicker('skins2', 'player2', savedSkin2);
 
-  // ==== Détection des manettes (bouton SR pour se connecter) ====
-  // Comme dans solo.html : si une seule manette physique est détectée
-  // (2 Joy-Con fusionnés par Windows), on exige précisément le bouton SR
-  // de gauche (index 19) pour le Joueur 1 et celui de droite (index 21)
-  // pour le Joueur 2, afin de bien séparer les deux moitiés. S'il y a 2
-  // manettes séparées, n'importe quel bouton suffit pour se connecter.
+  function setSkin(playerKey, skinNumber){
+    state[playerKey].skin = skinNumber;
+    localStorage.setItem(playerKey + 'Skin', skinNumber);
+    document.querySelectorAll('#skins' + playerKey.slice(-1) + ' .skin-thumb').forEach(t => {
+      t.classList.toggle('selected', parseInt(t.dataset.skin, 10) === skinNumber);
+    });
+  }
+
+  function cycleSkin(playerKey, direction){
+    const current = state[playerKey].skin;
+    const next = ((current - 1 + direction + 4) % 4) + 1;
+    setSkin(playerKey, next);
+  }
+
+  // ==== Connexion manette ====
   const statusEl = { player1: document.getElementById('status1'), player2: document.getElementById('status2') };
   const playBtn = document.getElementById('play-btn');
 
   function updateStatusText(){
-    const connectedCount = Object.values(navigator.getGamepads ? navigator.getGamepads() : []).filter(p => p).length;
-
-    if(joinStage === 'p1assign'){
-      statusEl.player1.textContent = (connectedCount === 1)
-        ? 'Appuie sur SR (gauche) pour te connecter'
-        : 'Appuie sur SR pour te connecter';
-    } else if(joinStage === 'p2assign'){
-      const sameCombinedPad = (connectedCount === 1);
-      statusEl.player2.textContent = sameCombinedPad
-        ? 'Appuie sur SR (droite) pour te connecter'
-        : 'Appuie sur SR pour te connecter';
-    }
+    if(!state.player1.connected) statusEl.player1.textContent = 'Appuie sur SR pour te connecter';
+    if(!state.player2.connected) statusEl.player2.textContent = 'Appuie sur SR pour te connecter';
   }
   updateStatusText();
+
+  function connectPlayer(playerKey, padIndex, cfg){
+    state[playerKey].connected = true;
+    state[playerKey].padIndex = padIndex;
+    state[playerKey].axisIndex = cfg.axisIndex;
+    state[playerKey].jumpButton = cfg.jumpButton;
+    state[playerKey].invertX = cfg.invertX;
+    state[playerKey].useDpadFallback = cfg.useDpadFallback;
+    statusEl[playerKey].textContent = 'Connecté ✓ — rebouge le stick pour changer de skin, rappuie pour valider';
+    statusEl[playerKey].classList.add('connected');
+    checkPlayBtn();
+  }
+
+  function togglePlayerReady(playerKey){
+    if(!state[playerKey].connected) return;
+    state[playerKey].ready = !state[playerKey].ready;
+    if(state[playerKey].ready){
+      statusEl[playerKey].textContent = 'Prêt ✓';
+      statusEl[playerKey].classList.add('ready');
+    } else {
+      statusEl[playerKey].textContent = 'Connecté ✓ — rebouge le stick pour changer de skin, rappuie pour valider';
+      statusEl[playerKey].classList.remove('ready');
+    }
+    checkPlayBtn();
+    maybeAutoLaunch();
+  }
+
+  function checkPlayBtn(){
+    playBtn.disabled = !(state.player1.connected && state.player2.connected);
+  }
+
+  function maybeAutoLaunch(){
+    if(launching) return;
+    if(state.player1.connected && state.player2.connected && state.player1.ready && state.player2.ready){
+      launchGame();
+    }
+  }
 
   function pollGamepads(){
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -249,64 +298,84 @@
 
         if(!justPressed) continue;
 
-        if(joinStage === 'p1assign' && index !== state.player2.padIndex){
-          if(connectedCount === 1 && btnIndex !== 19) continue;
-
-          state.player1.connected = true;
-          state.player1.padIndex = index;
-          // Cas manette combinée (SR gauche) : axe Y du stick gauche,
-          // bouton 19 pour sauter, pas d'inversion, pas de croix fallback.
-          // Cas manette séparée : réglages génériques par défaut.
-          if(connectedCount === 1){
-            state.player1.axisIndex = 1;
-            state.player1.jumpButton = 19;
-            state.player1.invertX = false;
-            state.player1.useDpadFallback = false;
-          } else {
-            state.player1.axisIndex = 0;
-            state.player1.jumpButton = 12;
-            state.player1.invertX = false;
-            state.player1.useDpadFallback = true;
+        if(connectedCount === 1){
+          // Manette combinée (2 Joy-Con fusionnés) : bouton 19 = côté
+          // Joueur 1, bouton 21 = côté Joueur 2. Peu importe lequel des
+          // deux appuie en premier, chaque bouton assigne toujours le même
+          // joueur — l'ordre de connexion n'a donc aucune importance.
+          if(btnIndex === 19){
+            if(!state.player1.connected){
+              connectPlayer('player1', index, { axisIndex: 1, jumpButton: 19, invertX: false, useDpadFallback: false });
+            } else {
+              togglePlayerReady('player1');
+            }
+          } else if(btnIndex === 21){
+            if(!state.player2.connected){
+              connectPlayer('player2', index, { axisIndex: 3, jumpButton: 21, invertX: true, useDpadFallback: false });
+            } else {
+              togglePlayerReady('player2');
+            }
           }
-          statusEl.player1.textContent = 'Connecté ✓';
-          statusEl.player1.classList.add('connected');
-          joinStage = 'p2assign';
-          updateStatusText();
-          break;
-        } else if(joinStage === 'p2assign'){
-          const sameCombinedPad = (index === state.player1.padIndex);
-          if(sameCombinedPad && btnIndex !== 21) continue;
-          if(!sameCombinedPad && index === state.player1.padIndex) continue;
-
-          state.player2.connected = true;
-          state.player2.padIndex = index;
-          if(sameCombinedPad){
-            state.player2.axisIndex = 3;
-            state.player2.jumpButton = 21;
-            state.player2.invertX = true;
-            state.player2.useDpadFallback = false;
-          } else {
-            state.player2.axisIndex = 0;
-            state.player2.jumpButton = 2;
-            state.player2.invertX = false;
-            state.player2.useDpadFallback = true;
+        } else {
+          // Manettes séparées : si cette manette est déjà connectée à un
+          // joueur, ce bouton sert à valider/dévalider "prêt" pour ce
+          // joueur. Sinon, elle rejoint le premier joueur encore libre
+          // (peu importe l'ordre : la première manette qui bouge prend la
+          // première place libre, la seconde prend l'autre).
+          if(index === state.player1.padIndex){
+            togglePlayerReady('player1');
+          } else if(index === state.player2.padIndex){
+            togglePlayerReady('player2');
+          } else if(!state.player1.connected){
+            connectPlayer('player1', index, { axisIndex: 0, jumpButton: 12, invertX: false, useDpadFallback: true });
+          } else if(!state.player2.connected){
+            connectPlayer('player2', index, { axisIndex: 0, jumpButton: 2, invertX: false, useDpadFallback: true });
           }
-          statusEl.player2.textContent = 'Connecté ✓';
-          statusEl.player2.classList.add('connected');
-          joinStage = 'done';
-          break;
         }
       }
     }
 
-    playBtn.disabled = !(state.player1.connected && state.player2.connected);
+    // ==== Changement de skin au stick pour les joueurs déjà connectés
+    // (mais pas encore "prêts", pour éviter de changer par erreur une
+    // fois validé) ====
+    ['player1', 'player2'].forEach(playerKey => {
+      const p = state[playerKey];
+      if(!p.connected || p.ready) return;
+      const pad = pads[p.padIndex];
+      if(!pad) return;
+      const axis = pad.axes[p.axisIndex];
+      if(!axis) return;
+
+      let val = axis.value;
+      if(p.invertX) val = -val;
+
+      const threshold = 0.6;
+      const tap = axisTapState[playerKey];
+
+      if(val > threshold && !tap.pos){
+        cycleSkin(playerKey, 1);
+        tap.pos = true;
+      } else if(val < threshold * 0.5){
+        tap.pos = false;
+      }
+
+      if(val < -threshold && !tap.neg){
+        cycleSkin(playerKey, -1);
+        tap.neg = true;
+      } else if(val > -threshold * 0.5){
+        tap.neg = false;
+      }
+    });
 
     requestAnimationFrame(pollGamepads);
   }
   requestAnimationFrame(pollGamepads);
 
-  // ==== Bouton Jouer : on sauvegarde tout et on part sur solo.html ====
-  playBtn.addEventListener('click', () => {
+  // ==== Lancement (bouton souris, ou automatique quand les 2 sont prêts) ====
+  function launchGame(){
+    if(launching) return;
+    launching = true;
+
     const config = {
       player1: {
         padIndex: state.player1.padIndex,
@@ -329,7 +398,9 @@
     };
     localStorage.setItem('joyconGameConfig', JSON.stringify(config));
     window.location.href = 'solo.html';
-  });
+  }
+
+  playBtn.addEventListener('click', launchGame);
 </script>
 </body>
 </html>
