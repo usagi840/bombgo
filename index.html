@@ -11,6 +11,7 @@
       justify-content: center;
       align-items: center;
       height: 100vh;
+      overflow: hidden;
       font-family: Arial, Helvetica, sans-serif;
     }
     #wrapper {
@@ -22,6 +23,7 @@
       flex-direction: column;
       box-sizing: border-box;
       overflow: hidden;
+      flex-shrink: 0;
     }
     h1 {
       text-align: center;
@@ -144,29 +146,45 @@
   </style>
 </head>
 <body>
-  
+
   <div id="wrapper">
-    <h1>Connecte toi et choisis ton skin</h1>
+    <h1>Menu — connecte-toi et choisis ton skin</h1>
     <div id="columns">
       <div class="player-column">
         <div class="player-title">Joueur 1</div>
         <div class="connect-status" id="status1">Appuie sur SR pour te connecter</div>
         <input type="text" id="pseudo1" maxlength="16" placeholder="Ton pseudo">
         <div class="skin-picker" id="skins1"></div>
-        <div class="hint">Joystick pour changer de skin, bouton SR pour valider / lancer</div>
+        <div class="hint">Stick ← → pour changer de skin, ton bouton SR pour valider / lancer</div>
       </div>
       <div class="player-column">
         <div class="player-title">Joueur 2</div>
         <div class="connect-status" id="status2">Appuie sur SR pour te connecter</div>
         <input type="text" id="pseudo2" maxlength="16" placeholder="Ton pseudo">
         <div class="skin-picker" id="skins2"></div>
-        <div class="hint">Joystick pour changer de skin, bouton SR pour valider / lancer</div>
+        <div class="hint">Stick ← → pour changer de skin, ton bouton SR pour valider / lancer</div>
       </div>
     </div>
+    <div id="bottom-bar">
       <button id="play-btn" disabled>Jouer</button>
+    </div>
   </div>
 
 <script>
+  // ==== Mise à l'échelle du canevas 800x600 pour remplir l'écran ====
+  // Le canevas garde toujours ses proportions (800x600) et reste bien
+  // cadré : il s'agrandit jusqu'à toucher soit la hauteur, soit la
+  // largeur de la fenêtre, selon celle qui est limitante.
+  (function(){
+    const wrapper = document.getElementById('wrapper');
+    function fitWrapper(){
+      const scale = Math.min(window.innerWidth / 800, window.innerHeight / 600);
+      wrapper.style.transform = 'scale(' + scale + ')';
+    }
+    window.addEventListener('resize', fitWrapper);
+    fitWrapper();
+  })();
+
   // ==== État ====
   const state = {
     player1: { connected: false, ready: false, padIndex: null, axisIndex: 0, jumpButton: 12, invertX: false, useDpadFallback: true, pseudo: '', skin: 1 },
@@ -197,6 +215,31 @@
     state.player2.pseudo = e.target.value;
     localStorage.setItem('player2Pseudo', e.target.value);
   });
+
+  // ==== Liste de pseudos prédéfinis, à faire défiler au stick (axe
+  // vertical, pour ne pas rentrer en conflit avec le changement de skin
+  // qui utilise l'axe horizontal du même stick) ====
+  const PSEUDO_OPTIONS = ['Joueur 1', 'Joueur 2', 'Ninja', 'Éclair', 'Champion', 'Fusée', 'Renard', 'Tornade', 'Phénix', 'Cobra', 'Titan', 'Panthère'];
+
+  function findPseudoIndex(name, fallback){
+    const i = PSEUDO_OPTIONS.indexOf(name);
+    return i !== -1 ? i : fallback;
+  }
+  state.player1.pseudoIndex = findPseudoIndex(state.player1.pseudo, 0);
+  state.player2.pseudoIndex = findPseudoIndex(state.player2.pseudo, 1);
+
+  function setPseudo(playerKey, name){
+    state[playerKey].pseudo = name;
+    localStorage.setItem(playerKey + 'Pseudo', name);
+    document.getElementById('pseudo' + playerKey.slice(-1)).value = name;
+  }
+
+  function cyclePseudo(playerKey, direction){
+    const len = PSEUDO_OPTIONS.length;
+    const next = ((state[playerKey].pseudoIndex + direction) % len + len) % len;
+    state[playerKey].pseudoIndex = next;
+    setPseudo(playerKey, PSEUDO_OPTIONS[next]);
+  }
 
   // ==== Sélecteur de skins (4 vignettes par joueur, cliquables ou via stick) ====
   const savedSkin1 = parseInt(localStorage.getItem('player1Skin'), 10) || 1;
@@ -232,6 +275,13 @@
     setSkin(playerKey, next);
   }
 
+  // Renvoie l'autre axe du même stick physique (celui qui n'est pas déjà
+  // utilisé pour le mouvement/skin), pour s'en servir pour le pseudo.
+  // Les axes vont par paire X/Y : 0↔1, 2↔3, etc.
+  function otherAxisIndex(axisIndex){
+    return (axisIndex % 2 === 0) ? axisIndex + 1 : axisIndex - 1;
+  }
+
   // ==== Connexion manette ====
   const statusEl = { player1: document.getElementById('status1'), player2: document.getElementById('status2') };
   const playBtn = document.getElementById('play-btn');
@@ -249,7 +299,7 @@
     state[playerKey].jumpButton = cfg.jumpButton;
     state[playerKey].invertX = cfg.invertX;
     state[playerKey].useDpadFallback = cfg.useDpadFallback;
-    statusEl[playerKey].textContent = 'Connecté — bouge le joystick pour changer de skin, rappuie pour valider';
+    statusEl[playerKey].textContent = 'Connecté ✓ — rebouge le stick pour changer de skin, rappuie pour valider';
     statusEl[playerKey].classList.add('connected');
     checkPlayBtn();
   }
@@ -261,7 +311,7 @@
       statusEl[playerKey].textContent = 'Prêt ✓';
       statusEl[playerKey].classList.add('ready');
     } else {
-      statusEl[playerKey].textContent = 'Connecté — bouge le joystick pour changer de skin, rappuie pour valider';
+      statusEl[playerKey].textContent = 'Connecté ✓ — rebouge le stick pour changer de skin, rappuie pour valider';
       statusEl[playerKey].classList.remove('ready');
     }
     checkPlayBtn();
@@ -395,11 +445,10 @@
       }
     };
     localStorage.setItem('joyconGameConfig', JSON.stringify(config));
-    window.location.href = 'game.html';
+    window.location.href = 'solo.html';
   }
 
   playBtn.addEventListener('click', launchGame);
-  
 </script>
 </body>
 </html>
