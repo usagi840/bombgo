@@ -146,22 +146,25 @@
 <body>
 
   <div id="wrapper">
-    <h1>Connecte toi et choisis ton skin</h1>
+    <h1>Menu — connecte-toi et choisis ton skin</h1>
     <div id="columns">
       <div class="player-column">
         <div class="player-title">Joueur 1</div>
         <div class="connect-status" id="status1">Appuie sur SR pour te connecter</div>
         <input type="text" id="pseudo1" maxlength="16" placeholder="Ton pseudo">
         <div class="skin-picker" id="skins1"></div>
-        <div class="hint">Joystick pour changer de skin, bouton SR pour valider / lancer</div>
+        <div class="hint">Stick ← → pour changer de skin, ton bouton SR pour valider / lancer</div>
       </div>
       <div class="player-column">
         <div class="player-title">Joueur 2</div>
         <div class="connect-status" id="status2">Appuie sur SR pour te connecter</div>
         <input type="text" id="pseudo2" maxlength="16" placeholder="Ton pseudo">
         <div class="skin-picker" id="skins2"></div>
-        <div class="hint">Joystick pour changer de skin, bouton SR pour valider / lancer</div>
+        <div class="hint">Stick ← → pour changer de skin, ton bouton SR pour valider / lancer</div>
       </div>
+    </div>
+    <div id="bottom-bar">
+      <button id="play-btn" disabled>Jouer</button>
     </div>
   </div>
 
@@ -248,7 +251,7 @@
     state[playerKey].jumpButton = cfg.jumpButton;
     state[playerKey].invertX = cfg.invertX;
     state[playerKey].useDpadFallback = cfg.useDpadFallback;
-    statusEl[playerKey].textContent = 'Connecté — bouge le joystick pour changer de skin, rappuie pour valider';
+    statusEl[playerKey].textContent = 'Connecté ✓ — rebouge le stick pour changer de skin, rappuie pour valider';
     statusEl[playerKey].classList.add('connected');
     checkPlayBtn();
   }
@@ -260,7 +263,7 @@
       statusEl[playerKey].textContent = 'Prêt ✓';
       statusEl[playerKey].classList.add('ready');
     } else {
-      statusEl[playerKey].textContent = 'Connecté — bouge le joystick pour changer de skin, rappuie pour valider';
+      statusEl[playerKey].textContent = 'Connecté ✓ — rebouge le stick pour changer de skin, rappuie pour valider';
       statusEl[playerKey].classList.remove('ready');
     }
     checkPlayBtn();
@@ -394,7 +397,7 @@
       }
     };
     localStorage.setItem('joyconGameConfig', JSON.stringify(config));
-    window.location.href = 'game.html';
+    window.location.href = 'solo.html';
   }
 
   playBtn.addEventListener('click', launchGame);
