@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Game</title>
+  <title>Solo</title>
   <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png">
 
   <!-- Phaser -->
@@ -16,9 +16,10 @@
     body {
       margin: 0;
       background-color: #413d3d;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      overflow: hidden;
+    }
+    #game-wrapper {
+      width: 100vw;
       height: 100vh;
     }
     canvas { border: 4px solid #291515; }
@@ -147,6 +148,16 @@
     type: Phaser.AUTO,
     width: 800,
     height: 600,
+    // Le canevas grandit pour remplir soit la hauteur, soit la largeur de
+    // la fenêtre (celle qui est limitante), en gardant toujours ses
+    // proportions 800x600 et en restant centré.
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+      width: 800,
+      height: 600,
+      parent: 'game-wrapper'
+    },
     physics: { default: 'arcade', arcade: { gravity:{y:300}, debug:false } },
     input: { gamepad: true },
     scene: { preload, create, update }
@@ -266,7 +277,6 @@
     this.physics.add.collider(player2, platforms);
     this.physics.add.collider(stars, platforms);
     this.physics.add.collider(bombs, platforms);
-    this.physics.add.collider(player1, player2);
     this.physics.add.overlap(player1, stars, collectStar, null, this);
     this.physics.add.overlap(player2, stars, collectStar, null, this);
     this.physics.add.collider(player1, bombs, hitBomb, null, this);
@@ -319,7 +329,7 @@
       // sélection classique plutôt que de rester bloqué sans rien afficher.
       if(usingMenuConfig && !pad1 && !pad2){
         menuConfigWaitFrames++;
-        if(menuConfigWaitFrames > 108000){
+        if(menuConfigWaitFrames > 180){
           usingMenuConfig = false;
           joinScreen = true;
           joinStage = 'p1assign';
@@ -486,7 +496,7 @@
       player.setVelocityY(-330);
     }
   }
-  
+
   function collectStar(player, star){
     star.disableBody(true,true);
     if(player === player1){
@@ -512,17 +522,17 @@
     bomb.disableBody(true,true);
 
     if(player === player1){
-        score1 = Math.max(0, score1 - 50);
+        score1 = Math.max(0, score1 - 20);
         scoreText1.setText(player1Pseudo+': ' + score1);
 
-        scoreEffect1.setText("-50");
+        scoreEffect1.setText("-20");
         setTimeout(() => scoreEffect1.setText(""), 1000);
 
     } else {
-        score2 = Math.max(0, score2 - 50);
+        score2 = Math.max(0, score2 - 20);
         scoreText2.setText(player2Pseudo+': ' + score2);
 
-        scoreEffect2.setText("-50");
+        scoreEffect2.setText("-20");
         setTimeout(() => scoreEffect2.setText(""), 1000);
     }
 }
