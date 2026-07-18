@@ -343,10 +343,10 @@
       if(!p.connected || p.ready) return;
       const pad = pads[p.padIndex];
       if(!pad) return;
-      const axis = pad.axes[p.axisIndex];
-      if(!axis) return;
+      const axisVal = pad.axes[p.axisIndex];
+      if(axisVal === undefined) return;
 
-      let val = axis.value;
+      let val = axisVal;
       if(p.invertX) val = -val;
 
       const threshold = 0.6;
