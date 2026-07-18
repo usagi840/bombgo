@@ -99,7 +99,7 @@
   </div>
 
 <script>
-  // Lecture des scores, pseudos et skins passés dans l'URL par solo.html
+  // Lecture des scores, pseudos et skins passés dans l'URL par game.html
   // (ex: result.html?score1=120&score2=90&name1=Alice&name2=Bob&skin1=3&skin2=1)
   const params = new URLSearchParams(window.location.search);
   const score1 = parseInt(params.get('score1'), 10) || 0;
@@ -141,13 +141,13 @@
   }
 
   // ==== Rejouer ====
-  // Le bouton souris relance simplement solo.html. Comme la configuration
+  // Le bouton souris relance simplement game.html. Comme la configuration
   // manette + skins + pseudos est toujours dans localStorage
-  // ("joyconGameConfig", écrite par menu.html), solo.html la retrouvera
+  // ("joyconGameConfig", écrite par menu.html), game.html la retrouvera
   // telle quelle et sautera directement l'écran de connexion : pas besoin
   // de rappuyer sur SR pour se reconnecter.
   function replay(){
-    window.location.href = 'solo.html';
+    window.location.href = 'game.html';
   }
 
   // ==== Rejouer à la manette (bouton 19/21, ou le bouton de saut
